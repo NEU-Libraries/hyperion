@@ -8,23 +8,11 @@ package atlas
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
-)
-
-// Sentinel errors so callers (and the TUI) can message a bad token, a resource
-// the token may not read, and a missing resource distinctly — Atlas keeps 403
-// and 404 apart on the wire, and so does hyperion.
-var (
-	ErrUnauthorized = errors.New("token rejected by Atlas (expired, revoked, or malformed)")
-	ErrForbidden    = errors.New("not readable with this token")
-	ErrNotFound     = errors.New("not found")
-	ErrGone         = errors.New("tombstoned")
 )
 
 // Client talks to one Atlas instance as one token-bearing user.
@@ -90,7 +78,7 @@ func (c *Client) Whoami(ctx context.Context) (User, error) {
 	}
 	var u User
 	if err := json.Unmarshal(body, &u); err != nil {
-		return User{}, fmt.Errorf("atlas: unexpected /user response: %w", err)
+		return User{}, badResponse("/user", err)
 	}
 	return u, nil
 }
@@ -155,7 +143,7 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 		return err
 	}
 	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("atlas: unexpected response for %s: %w", path, err)
+		return badResponse(path, err)
 	}
 	return nil
 }
@@ -193,32 +181,9 @@ func (c *Client) send(ctx context.Context, hc *http.Client, path string) (*http.
 	return resp, body, nil
 }
 
-func statusError(path string, status int, body []byte) error {
-	switch status {
-	case http.StatusUnauthorized:
-		return ErrUnauthorized
-	case http.StatusForbidden:
-		return ErrForbidden
-	case http.StatusNotFound:
-		return ErrNotFound
-	case http.StatusGone:
-		return ErrGone
-	default:
-		return fmt.Errorf("atlas: GET %s → HTTP %d: %s", path, status, snippet(body))
-	}
-}
-
 func title(s string) string {
 	if strings.TrimSpace(s) == "" {
 		return "(untitled)"
-	}
-	return s
-}
-
-func snippet(b []byte) string {
-	s := strings.TrimSpace(string(b))
-	if len(s) > 200 {
-		s = s[:200] + "…"
 	}
 	return s
 }

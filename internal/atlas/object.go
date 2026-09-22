@@ -86,7 +86,7 @@ func (c *Client) Inspect(ctx context.Context, noid string) (Object, error) {
 	}
 	obj, err := parseObject(body)
 	if err != nil {
-		return Object{}, fmt.Errorf("atlas: unexpected response for %s: %w", path, err)
+		return Object{}, badResponse(path, err)
 	}
 	obj.Type = typeByRoute[strings.Split(strings.TrimPrefix(path, "/"), "/")[0]]
 	obj.Path = path
@@ -109,22 +109,22 @@ func (c *Client) locate(ctx context.Context, id string) (string, error) {
 		http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
 	default:
 		if resp.StatusCode == http.StatusOK {
-			return "", fmt.Errorf("atlas: GET %s answered 200, expected a redirect", path)
+			return "", badResponse(path, errors.New("answered 200, expected a redirect"))
 		}
 		return "", statusError(path, resp.StatusCode, body)
 	}
 
 	loc, err := url.Parse(resp.Header.Get("Location"))
 	if err != nil {
-		return "", fmt.Errorf("atlas: GET %s redirected to an unreadable Location: %w", path, err)
+		return "", badResponse(path, fmt.Errorf("redirected to an unreadable Location: %w", err))
 	}
 	segs := strings.Split(strings.Trim(loc.EscapedPath(), "/"), "/")
 	if len(segs) < 2 {
-		return "", fmt.Errorf("atlas: GET %s redirected to unexpected %q", path, loc)
+		return "", badResponse(path, fmt.Errorf("redirected to unexpected %q", loc))
 	}
 	route, target := segs[len(segs)-2], segs[len(segs)-1]
 	if _, ok := typeByRoute[route]; !ok {
-		return "", fmt.Errorf("atlas: GET %s redirected to unknown type %q", path, route)
+		return "", badResponse(path, fmt.Errorf("redirected to unknown type %q", route))
 	}
 	return "/" + route + "/" + target, nil
 }

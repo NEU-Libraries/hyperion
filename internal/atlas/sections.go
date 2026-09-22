@@ -3,6 +3,7 @@ package atlas
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 )
@@ -202,7 +203,7 @@ func (c *Client) METS(ctx context.Context, t Type, id string) (json.RawMessage, 
 	for _, v := range wrap {
 		return v.METS, nil
 	}
-	return nil, fmt.Errorf("atlas: empty METS response for %s", id)
+	return nil, badResponse("/"+route+"/"+id+"/mets", errors.New("no METS in the response"))
 }
 
 // Permissions reads a resource's ACL envelope as ordered fields.
@@ -214,7 +215,7 @@ func (c *Client) Permissions(ctx context.Context, id string) ([]Field, error) {
 	}
 	obj, err := parseObject(body)
 	if err != nil {
-		return nil, fmt.Errorf("atlas: unexpected response for %s: %w", path, err)
+		return nil, badResponse(path, err)
 	}
 	return obj.Fields, nil
 }
