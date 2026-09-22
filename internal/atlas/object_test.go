@@ -28,6 +28,9 @@ func fakeAtlas(t *testing.T, redirects map[string]string, statuses map[string]in
 		}
 		if code, ok := statuses[r.URL.Path]; ok {
 			w.WriteHeader(code)
+			if body, ok := pages[r.URL.Path]; ok {
+				_, _ = w.Write([]byte(body))
+			}
 			return
 		}
 		if loc, ok := redirects[r.URL.Path]; ok {
@@ -149,5 +152,21 @@ func TestObjectTitleFallbacks(t *testing.T) {
 		if obj.Title != want {
 			t.Errorf("%s: title = %q, want %q", body, obj.Title, want)
 		}
+	}
+}
+
+func TestInspectReadsTombstonedRecord(t *testing.T) {
+	// Atlas answers a tombstoned resource 410 with its full record.
+	srv := fakeAtlas(t,
+		map[string]string{"/resources/w9": "/works/w9"},
+		map[string]int{"/works/w9": http.StatusGone},
+		map[string]string{"/works/w9": `{"work":{"id":"w9","title":"Withdrawn","tombstoned":true}}`})
+
+	obj, err := New(srv.URL, "tok").Inspect(context.Background(), "w9")
+	if err != nil {
+		t.Fatalf("a tombstoned record should still inspect: %v", err)
+	}
+	if obj.Title != "Withdrawn" {
+		t.Errorf("title = %q", obj.Title)
 	}
 }

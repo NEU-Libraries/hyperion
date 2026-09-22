@@ -75,9 +75,14 @@ func (c *Client) Inspect(ctx context.Context, noid string) (Object, error) {
 		return Object{}, err
 	}
 
-	body, err := c.get(ctx, path)
+	// A tombstoned resource answers 410 Gone with its full record — still worth
+	// inspecting, so 410 reads like 200 here (the record says tombstoned: true).
+	resp, body, err := c.send(ctx, c.http, path)
 	if err != nil {
 		return Object{}, err
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusGone {
+		return Object{}, statusError(path, resp.StatusCode, body)
 	}
 	obj, err := parseObject(body)
 	if err != nil {
