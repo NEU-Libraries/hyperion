@@ -1,7 +1,11 @@
 # Hyperion
 
-Bulk-export the descriptive **MODS** metadata for every member of a Digital
-Repository Service **Collection** or **Set** — one `<pid>.xml` file per member.
+Inspect any Digital Repository Service object by **PID** — its type, title,
+ancestors, and every field of its Atlas record — without cURL or a hand-built
+bearer header. And bulk-export the descriptive **MODS** metadata for every
+member of a **Collection** or **Set** — one `<pid>.xml` file per member.
+
+Hyperion only ever reads: its Atlas client has no verb but `GET`.
 
 A single self-contained binary (no runtime, no `bundle install`, no `pip`) with
 an interactive terminal UI and a headless mode. It talks to the **Atlas API**
@@ -85,6 +89,22 @@ Exit status is `0` when every member exported, `1` if any failed (failures are
 listed) — so it composes in a pipeline.
 
 ## What it does
+
+### Inspect
+
+1. Asks `GET /resources/:id` where the PID lives. Atlas answers with a redirect
+   to the typed route (`/works/:id`, `/files/:id`, …); Hyperion reads the type
+   from it and fetches that route from your configured Atlas URL.
+2. A Set isn't served by `/resources/:id`, so a 404 there falls back to
+   `/compilations/:id`.
+3. Shows the type, title, and ancestor chain, then every field of the record in
+   the order Atlas sends it. Object ids are labelled **PID** and person ids
+   **NUID** (depositor, proxy uploader, …).
+
+A PID that doesn't exist and one your token may not read get different
+messages, as Atlas keeps them apart (404 vs 403).
+
+### Export
 
 1. Resolves the container (`GET /collections/:id` or `/compilations/:id`) to
    confirm it exists and is readable with your token.

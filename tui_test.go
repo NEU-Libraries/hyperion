@@ -128,6 +128,7 @@ func TestAppNavigation(t *testing.T) {
 		t.Errorf("header missing name/title:\n%s", v)
 	}
 
+	a, _ = sendApp(a, tea.KeyMsg{Type: tea.KeyDown})
 	a = navigate(t, a, enter) // open export from the menu
 	if _, ok := a.top().(exportScreen); !ok || len(a.stack) != 2 {
 		t.Fatalf("after enter: top = %T depth = %d, want exportScreen at depth 2", a.top(), len(a.stack))
@@ -262,5 +263,103 @@ func TestProgressTally(t *testing.T) {
 	}
 	if _, cmd := sendExport(s, enter); !isPop(cmd) {
 		t.Error("a key on the summary should return to the menu")
+	}
+}
+
+func TestInspectFlow(t *testing.T) {
+	a := testApp()
+	a = navigate(t, a, enter) // "Inspect an object by PID" is first
+	if _, ok := a.top().(pidPromptScreen); !ok {
+		t.Fatalf("after enter: top = %T, want pidPromptScreen", a.top())
+	}
+	a, _ = sendApp(a, typed("w1"))
+	a = navigate(t, a, enter)
+	obj, ok := a.top().(objectScreen)
+	if !ok || obj.pid != "w1" || obj.state != objectLoading {
+		t.Fatalf("after PID: top = %T %+v, want loading objectScreen for w1", a.top(), a.top())
+	}
+
+	// A result for some other PID (a stale load) is ignored.
+	a, _ = sendApp(a, objectMsg{pid: "other", err: atlas.ErrNotFound})
+	if a.top().(objectScreen).state != objectLoading {
+		t.Fatal("a result for another PID changed the screen")
+	}
+
+	a.sess.width = 80
+	a, _ = sendApp(a, objectMsg{pid: "w1", obj: atlas.Object{
+		Type: atlas.TypeWork, NOID: "w1", Title: "Boston Harbor, 1775",
+		Ancestors: []atlas.Ancestor{{NOID: "c0", Klass: "Community", Title: "Library"}, {NOID: "k1", Klass: "Collection"}},
+		Fields: []atlas.Field{
+			{Key: "id", Value: []byte(`"w1"`)},
+			{Key: "title", Value: []byte(`"Boston Harbor, 1775"`)},
+			{Key: "tombstoned", Value: []byte(`true`)},
+			{Key: "depositor", Value: []byte(`"001234567"`)},
+			{Key: "handle", Value: []byte(`null`)},
+			{Key: "derivative_permissions", Value: []byte(`{"large": ["public"]}`)},
+		},
+	}})
+	v := a.View()
+	for _, want := range []string{
+		"Work", "PID", "Boston Harbor, 1775",
+		"Library (c0) › (untitled collection) (k1)",
+		"Depositor (NUID)", "001234567", "Tombstoned", "yes", `{"large":["public"]}`,
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("object view missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(strings.ToUpper(v), "NOID") {
+		t.Errorf("object view says NOID; the UX term is PID:\n%s", v)
+	}
+	if strings.Count(v, "Boston Harbor, 1775") != 1 {
+		t.Errorf("title should appear once (header only):\n%s", v)
+	}
+
+	a = navigate(t, a, esc) // back to the prompt, PID kept
+	p, ok := a.top().(pidPromptScreen)
+	if !ok || p.input.Value() != "w1" {
+		t.Fatalf("after esc: top = %T, want pidPromptScreen keeping w1", a.top())
+	}
+}
+
+func TestInspectErrorMessages(t *testing.T) {
+	for err, want := range map[error]string{
+		atlas.ErrNotFound:     "no object with PID zzz",
+		atlas.ErrForbidden:    "PID zzz exists, but this token may not read it",
+		atlas.ErrUnauthorized: "access token rejected",
+	} {
+		s := newObjectScreen(testSession(), "zzz")
+		next, _ := s.Update(objectMsg{pid: "zzz", err: err})
+		got := next.(objectScreen)
+		if got.state != objectError || !strings.Contains(got.View(), want) {
+			t.Errorf("%v: view = %q, want %q", err, got.View(), want)
+		}
+		if _, cmd := got.Update(enter); !isPop(cmd) {
+			t.Errorf("%v: a key on the error should go back", err)
+		}
+	}
+}
+
+func TestFieldValues(t *testing.T) {
+	for _, c := range []struct {
+		key, raw string
+		width    int
+		want     string
+	}{
+		{"size", `2048`, 0, "2.0 KiB (2048 bytes)"},
+		{"size", `12`, 0, "12 bytes"},
+		{"position", `3`, 0, "3"},
+		{"in_progress", `false`, 0, "no"},
+		{"read_groups", `["public","staff"]`, 0, "public, staff"},
+		{"description", `"line one\n  line two"`, 0, "line one line two"},
+		{"description", `"abcdefghijklmnop"`, 10, "abcdefghi…"},
+		{"description", `"abcdefghij"`, 10, "abcdefghij"},
+	} {
+		if got := fieldValue(c.key, []byte(c.raw), c.width); got != c.want {
+			t.Errorf("fieldValue(%s, %s) = %q, want %q", c.key, c.raw, got, c.want)
+		}
+	}
+	if got := fieldLabel("original_filename"); got != "Original filename" {
+		t.Errorf("fieldLabel = %q", got)
 	}
 }

@@ -116,7 +116,7 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a app) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  bulk MODS exporter") + "\n")
+	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
 	if a.sess.user.NUID != "" {
 		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("%s (%s)\n", a.sess.user.Name, a.sess.user.NUID))
 	}
