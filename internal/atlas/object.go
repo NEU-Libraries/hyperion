@@ -90,6 +90,15 @@ func (c *Client) Inspect(ctx context.Context, noid string) (Object, error) {
 	}
 	obj.Type = typeByRoute[strings.Split(strings.TrimPrefix(path, "/"), "/")[0]]
 	obj.Path = path
+	// A FileSet has no title of its own; its classification ("Audio") names it.
+	if obj.Type == TypeFileSet {
+		for _, f := range obj.Fields {
+			var cls string
+			if f.Key == "type" && json.Unmarshal(f.Value, &cls) == nil && cls != "" {
+				obj.Title = cls + " FileSet"
+			}
+		}
+	}
 	return obj, nil
 }
 
@@ -185,13 +194,13 @@ func OrderedFields(record json.RawMessage) ([]Field, error) {
 
 // objectTitle picks the human name each type carries: a title for the
 // descriptive types, a display name for a Person, a filename for a File or
-// Delegate.
+// Delegate — or, for a File with no name (a METS or MODS file), its use.
 func objectTitle(fields []Field) string {
 	byKey := make(map[string]json.RawMessage, len(fields))
 	for _, f := range fields {
 		byKey[f.Key] = f.Value
 	}
-	for _, k := range []string{"title", "display_name", "original_filename", "filename", "label"} {
+	for _, k := range []string{"title", "display_name", "original_filename", "filename", "label", "use"} {
 		var s string
 		if json.Unmarshal(byKey[k], &s) == nil && strings.TrimSpace(s) != "" {
 			return s

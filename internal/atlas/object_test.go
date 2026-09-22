@@ -141,9 +141,10 @@ func TestInspectEscapesPID(t *testing.T) {
 
 func TestObjectTitleFallbacks(t *testing.T) {
 	for body, want := range map[string]string{
-		`{"person":{"id":"p1","display_name":"Doe, Jane"}}`: "Doe, Jane",
-		`{"file_set":{"id":"f1","type":"image"}}`:           "(untitled)",
-		`{"work":{"id":"w1","title":"  "}}`:                 "(untitled)",
+		`{"person":{"id":"p1","display_name":"Doe, Jane"}}`:                         "Doe, Jane",
+		`{"file_set":{"id":"f1"}}`:                                                  "(untitled)",
+		`{"blob":{"id":"b1","original_filename":null,"use":"Structural Metadata"}}`: "Structural Metadata",
+		`{"work":{"id":"w1","title":"  "}}`:                                         "(untitled)",
 	} {
 		obj, err := parseObject([]byte(body))
 		if err != nil {
@@ -168,5 +169,16 @@ func TestInspectReadsTombstonedRecord(t *testing.T) {
 	}
 	if obj.Title != "Withdrawn" {
 		t.Errorf("title = %q", obj.Title)
+	}
+}
+
+func TestInspectNamesAFileSetByItsType(t *testing.T) {
+	srv := fakeAtlas(t,
+		map[string]string{"/resources/fs1": "/file_sets/fs1"},
+		nil,
+		map[string]string{"/file_sets/fs1": `{"file_set":{"id":"fs1","type":"Audio","position":null}}`})
+	obj, err := New(srv.URL, "tok").Inspect(context.Background(), "fs1")
+	if err != nil || obj.Title != "Audio FileSet" {
+		t.Errorf("title = %q, %v", obj.Title, err)
 	}
 }

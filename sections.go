@@ -88,7 +88,8 @@ func modsHistorySection(sess *session, obj atlas.Object) screen {
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			versions, err := c.MODSVersions(ctx, obj.NOID)
 			if errors.Is(err, atlas.ErrForbidden) {
-				return nil, userErr("MODS history is admin only: it names who made each edit.")
+				return nil, userErr("MODS history needs a full admin token; delegated admins can't read it. " +
+					"Atlas gates it on the audit log, because it names who made each edit.")
 			}
 			items := make([]listItem, len(versions))
 			for i, v := range versions {
