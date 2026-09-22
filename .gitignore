@@ -1,0 +1,6 @@
+# Compiled binary (build with `go build -o hyperion .`)
+/hyperion
+/hyperion-*
+
+# Default export target (`./<pid>-mods/`) — don't commit downloaded MODS.
+/*-mods/
