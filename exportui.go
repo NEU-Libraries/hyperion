@@ -48,6 +48,7 @@ type exportScreen struct {
 	kindIdx   int // 0 = Collection, 1 = Set
 	container atlas.Container
 	outDir    string
+	existing  int // members whose file is already in outDir, to be replaced
 
 	sub       chan export.Progress
 	total     int
@@ -68,7 +69,7 @@ type (
 
 func newExportScreen(sess *session) exportScreen {
 	pid := textinput.New()
-	pid.Prompt = "PID: "
+	pid.Prompt = "Collection PID: "
 	pid.Placeholder = "e.g. gqnkbq9"
 	pid.CharLimit = 64
 
@@ -131,9 +132,7 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		case "down", "j":
 			s.kindIdx = min(s.kindIdx+1, 1)
 		case "enter":
-			s.pidInput.Focus()
-			s.state = exportPID
-			return s, textinput.Blink
+			return s.toPID()
 		case "q", "esc":
 			return s, pop
 		}
@@ -186,9 +185,13 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		switch msg.String() {
 		case "y", "Y", "enter":
 			return s.startDownload()
-		default:
-			return s, pop
+		case "n", "N", "esc":
+			// Back to the folder, everything kept, to change it or go back further.
+			s.outInput.Focus()
+			s.state = exportOut
+			return s, textinput.Blink
 		}
+		return s, nil
 
 	case exportDone:
 		if isBackKey(msg) {
@@ -196,9 +199,22 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		}
 		return s, nil
 	case exportError:
-		return s, problemKey(s.sess, s.prob, msg, pop)
+		// Back to the PID, kept: the likely fix is a typo or the other type.
+		if isBackKey(msg) {
+			return s.toPID()
+		}
+		return s, problemKey(s.sess, s.prob, msg, nil)
 	}
 	return s, nil
+}
+
+// toPID opens the PID prompt, labelled for the chosen type.
+func (s exportScreen) toPID() (screen, tea.Cmd) {
+	s.pidInput.Prompt = s.kindName() + " PID: "
+	s.pidInput.CursorEnd()
+	s.pidInput.Focus()
+	s.state = exportPID
+	return s, textinput.Blink
 }
 
 func (s exportScreen) resolveCmd() tea.Cmd {
@@ -208,7 +224,7 @@ func (s exportScreen) resolveCmd() tea.Cmd {
 	}
 	client, pid := s.sess.client, s.pidInput.Value()
 	return func() tea.Msg {
-		c, err := resolve(context.Background(), client, kind, pid)
+		c, err := resolveForExport(context.Background(), client, kind, pid)
 		return resolvedMsg{container: c, err: err, kind: kind, pid: pid}
 	}
 }
@@ -219,11 +235,13 @@ func (s exportScreen) handleResolved(msg resolvedMsg) (screen, tea.Cmd) {
 		s.prob = resolveProblem(msg.err, msg.kind, msg.pid)
 		s.state = exportError
 	case len(msg.container.Members) == 0:
-		s.prob = problem{headline: "Nothing to export.", reason: fmt.Sprintf("That %s has no members this token can read.", msg.kind)}
+		s.prob = problem{headline: "Nothing to export.",
+			reason: fmt.Sprintf("This %s has no members your account can view.", msg.kind)}
 		s.state = exportError
 	default:
 		s.container = msg.container
 		s.total = len(msg.container.Members)
+		s.existing = export.Existing(s.outDir, msg.container.Members)
 		s.state = exportConfirm
 	}
 	return s, nil
@@ -259,11 +277,13 @@ func (s exportScreen) View() string {
 		return "Export the MODS of every member of a…\n\n" + menuView([]string{"Collection", "Set"}, s.kindIdx) +
 			"\n" + dimStyle.Render("↑/↓ to move · enter to select · esc to go back")
 	case exportPID:
-		return s.pidInput.View() + "\n\n" + dimStyle.Render("enter to continue · esc to go back")
+		return fmt.Sprintf("Which %s? Enter its PID.\n\n", strings.ToLower(s.kindName())) + s.pidInput.View() +
+			"\n\n" + dimStyle.Render("enter to continue · esc to go back")
 	case exportOut:
-		return s.outInput.View() + "\n\n" + dimStyle.Render("enter to continue · esc to go back")
+		return "Save the MODS files in this folder:\n\n" + s.outInput.View() +
+			"\n\n" + dimStyle.Render("enter to continue · esc to go back")
 	case exportResolving:
-		return fmt.Sprintf("%s Resolving %s %s…", s.spinner.View(), s.kindLabel(), s.pidInput.Value())
+		return fmt.Sprintf("%s Looking up %s %s…", s.spinner.View(), s.kindName(), s.pidInput.Value())
 	case exportConfirm:
 		return s.viewConfirm()
 	case exportDownloading:
@@ -276,10 +296,14 @@ func (s exportScreen) View() string {
 }
 
 func (s exportScreen) viewConfirm() string {
-	return fmt.Sprintf("%s %s\n%s\n\nDownload? %s",
-		okStyle.Render("✓"), s.container.Title,
-		dimStyle.Render(fmt.Sprintf("%d %s → %s", s.total, records(s.total), s.outDir)),
-		dimStyle.Render("(y/n)"))
+	var b strings.Builder
+	fmt.Fprintf(&b, "Export %s from %q to %s?", plural(s.total, "MODS file"), s.container.Title, s.outDir)
+	if s.existing > 0 {
+		b.WriteString("\n\n" + warnStyle.Render(fmt.Sprintf("⚠ %s already has %d of these files; they will be replaced.",
+			s.outDir, s.existing)))
+	}
+	b.WriteString("\n\n" + dimStyle.Render("y to export · n to go back"))
+	return b.String()
 }
 
 func (s exportScreen) viewDownloading() string {
@@ -287,9 +311,10 @@ func (s exportScreen) viewDownloading() string {
 	if s.total > 0 {
 		ratio = float64(s.completed) / float64(s.total)
 	}
-	return fmt.Sprintf("Downloading MODS…\n\n%s\n%s",
+	return fmt.Sprintf("Exporting MODS…\n\n%s\n%s\n\n%s",
 		s.prog.ViewAs(ratio),
-		dimStyle.Render(fmt.Sprintf("%d/%d", s.completed, s.total)))
+		dimStyle.Render(fmt.Sprintf("%d of %d", s.completed, s.total)),
+		dimStyle.Render("ctrl+c stops the export and quits Hyperion"))
 }
 
 func (s exportScreen) viewDone() string {
@@ -300,8 +325,16 @@ func (s exportScreen) viewDone() string {
 // hyperion exits, since the alternate screen takes the TUI's copy with it.
 func (s exportScreen) summary() string {
 	saved := s.total - len(s.failures)
+	line := fmt.Sprintf("Saved %s from %q to %s", plural(saved, "MODS file"), s.container.Title, s.outDir)
 	var b strings.Builder
-	b.WriteString(okStyle.Render(fmt.Sprintf("✓ Saved %d %s from %q to %s", saved, records(saved), s.container.Title, s.outDir)))
+	switch {
+	case len(s.failures) == 0:
+		b.WriteString(okStyle.Render("✓ " + line))
+	case saved == 0:
+		b.WriteString(errStyle.Render("✗ " + line))
+	default:
+		b.WriteString(warnStyle.Render(fmt.Sprintf("⚠ Saved %d of %d MODS files from %q to %s", saved, s.total, s.container.Title, s.outDir)))
+	}
 	if len(s.failures) > 0 {
 		b.WriteString("\n" + warnStyle.Render(fmt.Sprintf("⚠ %d could not be exported:", len(s.failures))))
 		for i, f := range s.failures {
@@ -315,11 +348,17 @@ func (s exportScreen) summary() string {
 	return b.String()
 }
 
-func (s exportScreen) crumb() string { return "Export MODS" }
-
-func (s exportScreen) kindLabel() string {
-	if s.kindIdx == 1 {
-		return "set"
+// crumb names the export once it has a target: "Export MODS: Set sn02xjb".
+func (s exportScreen) crumb() string {
+	if s.state > exportPID {
+		return "Export MODS: " + s.kindName() + " " + s.pidInput.Value()
 	}
-	return "collection"
+	return "Export MODS"
+}
+
+func (s exportScreen) kindName() string {
+	if s.kindIdx == 1 {
+		return "Set"
+	}
+	return "Collection"
 }

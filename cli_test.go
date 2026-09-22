@@ -37,6 +37,8 @@ func fakeAtlasCLI(t *testing.T) *httptest.Server {
 			w.Write([]byte(workRecord))
 		case "/collections/k1":
 			w.Write([]byte(`{"collection":{"id":"k1","title":"Maps"}}`))
+		case "/compilations/s1":
+			w.Write([]byte(`{"compilation":{"id":"s1","title":"Reading list"}}`))
 		case "/collections/k1/children":
 			w.Write([]byte(`["w1"]`))
 		case "/resources/w1/mods.xml":
@@ -173,5 +175,18 @@ func TestVersionAndStrayArguments(t *testing.T) {
 	}
 	if code, _, errOut := runCLI(t, srv, false, "w1"); code != exitUsage || !strings.Contains(errOut, `unexpected "w1"`) {
 		t.Errorf("a bare PID: code=%d stderr=%q", code, errOut)
+	}
+}
+
+func TestExportNamesTheWrongType(t *testing.T) {
+	srv := fakeAtlasCLI(t)
+	for args, want := range map[string]string{
+		"export -t collection -p s1": "s1 is a Set, not a Collection. Go back and choose Set.",
+		"export -t set -p w1":        "w1 is a Work. Only a Collection or a Set can be exported.",
+	} {
+		code, _, errOut := runCLI(t, srv, false, append(strings.Fields(args), "-o", t.TempDir())...)
+		if code != exitFailed || !strings.Contains(errOut, want) {
+			t.Errorf("%s: code=%d stderr=%q, want %q", args, code, errOut, want)
+		}
 	}
 }

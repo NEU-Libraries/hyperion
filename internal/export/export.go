@@ -89,3 +89,15 @@ func fetch(ctx context.Context, client *atlas.Client, noid, dir string) error {
 	}
 	return os.WriteFile(filepath.Join(dir, noid+".xml"), xml, 0o644)
 }
+
+// Existing counts the members whose <noid>.xml is already in dir — the files
+// a Download into dir would replace.
+func Existing(dir string, members []atlas.Member) int {
+	n := 0
+	for _, m := range members {
+		if _, err := os.Stat(filepath.Join(dir, m.NOID+".xml")); err == nil {
+			n++
+		}
+	}
+	return n
+}

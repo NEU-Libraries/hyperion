@@ -220,10 +220,3 @@ func menuView(labels []string, sel int) string {
 	}
 	return b.String()
 }
-
-func records(n int) string {
-	if n == 1 {
-		return "record"
-	}
-	return "records"
-}

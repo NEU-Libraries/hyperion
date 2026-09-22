@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -112,5 +114,34 @@ func TestSignInErrorOffersARetry(t *testing.T) {
 	}
 	if _, cmd := s.Update(esc); !isQuit(cmd) {
 		t.Error("esc on the URL prompt should still quit")
+	}
+}
+
+func TestExportWarnsBeforeReplacingFiles(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"a.xml", "b.xml", "unrelated.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("edited"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := newExportScreen(testSession())
+	s.outDir, s.state = dir, exportResolving
+	s, _ = sendExport(s, resolvedMsg{kind: atlas.Set, pid: "s1", container: atlas.Container{Kind: atlas.Set, Title: "Reading list",
+		Members: []atlas.Member{{NOID: "a"}, {NOID: "b"}, {NOID: "c"}}}})
+	if want := dir + " already has 2 of these files; they will be replaced."; !strings.Contains(ansi.Strip(s.View()), want) {
+		t.Errorf("confirm should warn %q:\n%s", want, ansi.Strip(s.View()))
+	}
+}
+
+func TestExportSummaryShowsPartialFailure(t *testing.T) {
+	s := newExportScreen(testSession())
+	s.state, s.total, s.outDir, s.container.Title = exportDownloading, 3, "./out", "Maps"
+	s, _ = sendExport(s, progressMsg{NOID: "a"})
+	s, _ = sendExport(s, progressMsg{NOID: "b", Err: atlas.ErrForbidden})
+	s, _ = sendExport(s, progressMsg{NOID: "c"})
+	s, _ = sendExport(s, downloadDoneMsg{})
+	v := ansi.Strip(s.View())
+	if !strings.Contains(v, `⚠ Saved 2 of 3 MODS files from "Maps"`) || !strings.Contains(v, "b: not readable") {
+		t.Errorf("partial export summary:\n%s", v)
 	}
 }

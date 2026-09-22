@@ -200,11 +200,18 @@ func TestFlowToConfirm(t *testing.T) {
 	if s.state != exportConfirm || s.total != 3 {
 		t.Fatalf("after resolved: state=%v total=%d", s.state, s.total)
 	}
-	if v := s.View(); !strings.Contains(v, "Test Collection") || !strings.Contains(v, "3 records") {
+	if v := s.View(); !strings.Contains(v, `Export 3 MODS files from "Test Collection" to ./gqnkbq9-mods?`) {
 		t.Errorf("confirm view:\n%s", v)
 	}
-	if _, cmd := sendExport(s, typed("n")); !isPop(cmd) {
-		t.Error("declining the download should return to the menu")
+	if strings.Contains(s.View(), "replaced") {
+		t.Error("nothing is in the folder, so nothing should be said to be replaced")
+	}
+	if s.crumb() != "Export MODS: Collection gqnkbq9" {
+		t.Errorf("crumb = %q", s.crumb())
+	}
+	back, _ := sendExport(s, typed("n"))
+	if back.state != exportOut || back.outInput.Value() != "./gqnkbq9-mods" || back.pidInput.Value() != "gqnkbq9" {
+		t.Errorf("n should go back to the folder with everything kept: state=%v", back.state)
 	}
 }
 
@@ -235,12 +242,16 @@ func TestResolveErrors(t *testing.T) {
 	if notFound.state != exportError || !strings.Contains(notFound.View(), "PID zzz") {
 		t.Errorf("not-found: state=%v view=%q", notFound.state, notFound.View())
 	}
-	if _, cmd := sendExport(notFound, enter); !isPop(cmd) {
-		t.Error("a key on the error should return to the menu")
+	back, _ := sendExport(notFound, enter)
+	if back.state != exportPID || back.pidInput.Value() != "" && back.pidInput.Value() != "zzz" {
+		t.Errorf("enter on the error should go back to the PID prompt: state=%v", back.state)
+	}
+	if again, cmd := sendExport(notFound, typed("x")); cmd != nil || again.state != exportError {
+		t.Error("a stray key on the error should do nothing")
 	}
 
 	empty, _ := sendExport(base, resolvedMsg{container: atlas.Container{Kind: atlas.Set}, kind: atlas.Set, pid: "x"})
-	if empty.state != exportError || !strings.Contains(empty.View(), "no members this token can read") {
+	if empty.state != exportError || !strings.Contains(empty.View(), "no members your account can view") {
 		t.Errorf("empty: state=%v view=%q", empty.state, empty.View())
 	}
 }

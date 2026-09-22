@@ -169,7 +169,7 @@ func TestExportDoneLeavesFarewell(t *testing.T) {
 	s.container.Title = "Maps"
 	s, _ = sendExport(s, progressMsg{NOID: "a"})
 	s, _ = sendExport(s, downloadDoneMsg{})
-	if !strings.Contains(s.sess.farewell, `Saved 1 record from "Maps" to ./out`) {
+	if !strings.Contains(s.sess.farewell, `Saved 1 MODS file from "Maps" to ./out`) {
 		t.Errorf("farewell = %q", s.sess.farewell)
 	}
 }

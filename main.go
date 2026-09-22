@@ -139,7 +139,7 @@ func (c cli) headlessExport(client *atlas.Client, kind atlas.Kind, pid, outDir s
 		fmt.Fprintln(c.stderr, "hyperion:", explain("Couldn't sign in to Atlas.", err).text())
 		return exitFailed
 	}
-	container, err := resolve(ctx, client, kind, pid)
+	container, err := resolveForExport(ctx, client, kind, pid)
 	if err != nil {
 		fmt.Fprintln(c.stderr, "hyperion:", resolveProblem(err, kind, pid).text())
 		if errors.Is(err, atlas.ErrNotFound) {
@@ -154,7 +154,10 @@ func (c cli) headlessExport(client *atlas.Client, kind atlas.Kind, pid, outDir s
 	if outDir == "" {
 		outDir = "./" + pid + "-mods"
 	}
-	fmt.Fprintf(c.stderr, "Exporting %d MODS record(s) from %q → %s\n", len(container.Members), container.Title, outDir)
+	fmt.Fprintf(c.stderr, "Exporting %s from %q to %s\n", plural(len(container.Members), "MODS file"), container.Title, outDir)
+	if n := export.Existing(outDir, container.Members); n > 0 {
+		fmt.Fprintf(c.stderr, "Replacing %s already in %s.\n", plural(n, "file"), outDir)
+	}
 	res, _ := export.Download(ctx, client, container.Members, outDir, concurrency, nil)
 	fmt.Fprintf(c.stderr, "Saved %d; failed %d.\n", len(res.Saved), len(res.Failed))
 	for noid, e := range res.Failed {
@@ -164,6 +167,28 @@ func (c cli) headlessExport(client *atlas.Client, kind atlas.Kind, pid, outDir s
 		return exitFailed
 	}
 	return exitOK
+}
+
+// resolveForExport resolves a Collection or Set to export. When no container
+// of that kind has the PID, it checks what the PID is, so a Set entered as a
+// Collection (or a Work entered as either) says so instead of "not found".
+func resolveForExport(ctx context.Context, client *atlas.Client, kind atlas.Kind, pid string) (atlas.Container, error) {
+	c, err := resolve(ctx, client, kind, pid)
+	if !errors.Is(err, atlas.ErrNotFound) {
+		return c, err
+	}
+	obj, ierr := client.Inspect(ctx, pid)
+	if ierr != nil {
+		return c, err
+	}
+	want := map[atlas.Kind]atlas.Type{atlas.Collection: atlas.TypeCollection, atlas.Set: atlas.TypeSet}[kind]
+	switch obj.Type {
+	case want:
+		return c, err
+	case atlas.TypeCollection, atlas.TypeSet:
+		return c, userErr(fmt.Sprintf("%s is a %s, not a %s. Go back and choose %s.", pid, obj.Type, want, obj.Type))
+	}
+	return c, userErr(fmt.Sprintf("%s is a %s. Only a Collection or a Set can be exported.", pid, obj.Type))
 }
 
 func resolve(ctx context.Context, client *atlas.Client, kind atlas.Kind, pid string) (atlas.Container, error) {
@@ -193,9 +218,9 @@ func parseKind(s string) (atlas.Kind, error) {
 func resolveProblem(err error, kind atlas.Kind, pid string) problem {
 	switch {
 	case errors.Is(err, atlas.ErrNotFound):
-		err = userErr(fmt.Sprintf("No %s has this PID, or this token may not read it.", kind))
+		err = userErr(fmt.Sprintf("No %s has this PID, or your account doesn't have permission to view it.", kind))
 	case errors.Is(err, atlas.ErrForbidden):
-		err = userErr(fmt.Sprintf("The %s exists, but this token may not read it.", kind))
+		err = userErr(fmt.Sprintf("The %s exists, but your account doesn't have permission to view it.", kind))
 	}
 	return explain(fmt.Sprintf("Couldn't open the %s with PID %s.", kind, pid), err)
 }
