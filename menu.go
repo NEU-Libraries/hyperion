@@ -50,5 +50,5 @@ func (s menuScreen) View() string {
 		labels[i] = it.label
 	}
 	return panel(s.sess, titleStyle.Render("What would you like to do?"), menuView(labels, s.sel),
-		"↑/↓ to move · enter to select · q to quit")
+		"↑/↓ to move · enter to select") // the app adds "q to quit"
 }

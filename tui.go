@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const defaultURL = "https://atlas.library.northeastern.edu"
@@ -191,7 +192,7 @@ func (a app) View() string {
 	if typing(a.top()) {
 		quitKey = "ctrl+c to quit"
 	}
-	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS · "+quitKey) + "\n")
+	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
 	if a.sess.user.NUID != "" {
 		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("Signed in as %s (NUID %s)\n", a.sess.user.Name, a.sess.user.NUID))
 		b.WriteString("\n" + a.trail() + "\n")
@@ -199,7 +200,7 @@ func (a app) View() string {
 	if a.quitting {
 		b.WriteString("\n" + a.quitView() + "\n")
 	} else {
-		b.WriteString("\n" + a.top().View() + "\n")
+		b.WriteString("\n" + withQuitHint(a.top().View(), quitKey, a.sess.cols()) + "\n")
 	}
 
 	// Keep every line clear of the last column. A line that exactly fills the
@@ -211,6 +212,35 @@ func (a app) View() string {
 	}
 	return b.String()
 }
+
+// withQuitHint ends a screen's key row — its last line — with the way to
+// quit, so it sits with every other key, unless that row already says how to
+// quit (the menu, sign-in). A screen with no key row, such as a spinner in its
+// frame, gets the hint on a line of its own. A row too long for width (0 =
+// unknown) switches to its compact wording, so the hint isn't cut off the end.
+func withQuitHint(view, quitKey string, width int) string {
+	lines := strings.Split(view, "\n")
+	last := strings.TrimSpace(ansi.Strip(lines[len(lines)-1]))
+	switch {
+	case strings.Contains(last, "quit"):
+		return view
+	case last == "" || strings.HasPrefix(last, "╰"):
+		return view + "\n\n" + dimStyle.Render(quitKey)
+	}
+	row := lines[len(lines)-1] + dimStyle.Render(" · "+quitKey)
+	if width > 0 && lipgloss.Width(row) > width {
+		row = compactKeys.Replace(row)
+	}
+	lines[len(lines)-1] = row
+	return strings.Join(lines, "\n")
+}
+
+// compactKeys is the key help's short wording, for a row that won't fit.
+var compactKeys = strings.NewReplacer(
+	"esc to go back", "esc back", "↑/↓ to scroll", "↑/↓ scroll", "↑/↓ to move", "↑/↓ move",
+	"enter to open", "enter open", "enter to select", "enter select", "enter to continue", "enter next",
+	"enter to inspect", "enter inspect", "ctrl+c to quit", "ctrl+c quit", "q to quit", "q quit",
+)
 
 // quitView asks to confirm quitting, in place of the current screen; the
 // trail above still shows where you'd leave from.

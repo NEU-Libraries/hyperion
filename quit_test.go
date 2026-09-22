@@ -8,6 +8,7 @@ import (
 	"hyperion/internal/atlas"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -94,5 +95,60 @@ func TestQuittingMidExportWarnsAndTheExportCarriesOn(t *testing.T) {
 	a, _ = sendApp(a, progressMsg{NOID: "d"})
 	if got := a.top().(exportScreen).completed; got != 4 || !a.quitting {
 		t.Errorf("the export should carry on while asking: completed=%d quitting=%v", got, a.quitting)
+	}
+}
+
+// keyRow is the last non-blank line of the app's view: the key help.
+func keyRow(a app) string {
+	lines := strings.Split(strings.TrimRight(ansi.Strip(a.View()), "\n "), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+func TestTheKeyRowEndsWithHowToQuit(t *testing.T) {
+	menu := testApp()
+	if row := keyRow(menu); row != "↑/↓ to move · enter to select · q to quit" {
+		t.Errorf("menu key row = %q", row)
+	}
+	if strings.Contains(strings.Split(ansi.Strip(menu.View()), "\n")[0], "quit") {
+		t.Error("the header should no longer carry the quit hint")
+	}
+	if row := keyRow(deepApp(t)); !strings.HasSuffix(row, "esc to go back · q to quit") {
+		t.Errorf("MODS key row = %q", row)
+	}
+	prompt := navigate(t, testApp(), enter)
+	if row := keyRow(prompt); row != "enter to inspect · esc to go back · ctrl+c to quit" {
+		t.Errorf("while typing, the key row = %q", row)
+	}
+	asked, _ := sendApp(deepApp(t), typed("q"))
+	if row := keyRow(asked); row != "y to quit · n or esc to stay" {
+		t.Errorf("the quit question's key row = %q", row)
+	}
+
+	// A screen still loading has no key row of its own; the hint stands alone.
+	loading := testApp()
+	loading = navigate(t, loading, enter)
+	loading, _ = sendApp(loading, typed("w1"))
+	loading = navigate(t, loading, enter)
+	if row := keyRow(loading); row != "q to quit" {
+		t.Errorf("a loading screen's key row = %q", row)
+	}
+}
+
+func TestALongKeyRowCompactsRatherThanLoseTheQuitHint(t *testing.T) {
+	a := testApp()
+	a.sess.width, a.sess.height = 80, 30
+	a, _ = sendApp(a, pushMsg{newPagerScreen(a.sess, "MODS", "", func(context.Context, *atlas.Client) (doc, error) {
+		long := strings.Repeat("<mods:note>a long line of MODS</mods:note>", 3)
+		return doc{render: textRender(strings.Repeat(long+"\n", 40)), raw: []byte(long)}, nil
+	}).withRaw("/resources/w1/mods.xml", "w1-mods")})
+	a, _ = sendApp(a, initResult[pagerMsg](t, a.top().Init()))
+	row := keyRow(a)
+	if !strings.HasSuffix(row, "esc back · q quit") || lipgloss.Width(row) > 79 {
+		t.Errorf("at 80 columns the full pager key row should compact and keep the hint: %q (%d wide)", row, lipgloss.Width(row))
+	}
+	a.sess.width = 120
+	a, _ = sendApp(a, tea.WindowSizeMsg{Width: 120, Height: 30})
+	if row := keyRow(a); !strings.HasSuffix(row, "esc to go back · q to quit") {
+		t.Errorf("with room, the full wording should stay: %q", row)
 	}
 }
