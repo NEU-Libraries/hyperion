@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -133,5 +134,81 @@ func TestPagerPans(t *testing.T) {
 	s, _ = sendPager(s, tea.KeyMsg{Type: tea.KeyLeft})
 	if got := first(); !strings.HasPrefix(got, "0123") {
 		t.Errorf("← should pan back, view starts %q", got)
+	}
+}
+
+func TestWrapLinesKeepsIndentAndText(t *testing.T) {
+	withColour(t)
+	src := highlightXML("<a>\n    <mods:note>" + strings.Repeat("word ", 20) + "</mods:note>\n</a>")
+	out, starts := wrapLines(src, 40)
+	lines := strings.Split(out, "\n")
+	if len(starts) != 3 || starts[0] != 0 || starts[1] != 1 || starts[2] != len(lines)-1 {
+		t.Fatalf("starts = %v over %d lines", starts, len(lines))
+	}
+	for i, l := range lines {
+		if w := ansi.StringWidth(l); w > 40 {
+			t.Errorf("line %d is %d wide", i, w)
+		}
+	}
+	if !strings.HasPrefix(ansi.Strip(lines[1]), "    <mods:note>") {
+		t.Errorf("first part should keep its indent: %q", ansi.Strip(lines[1]))
+	}
+	for _, l := range lines[2 : len(lines)-1] {
+		if !strings.HasPrefix(ansi.Strip(l), "      ") {
+			t.Errorf("continuation should hang under the indent: %q", ansi.Strip(l))
+		}
+	}
+	squash := func(s string) string { return strings.Join(strings.Fields(ansi.Strip(s)), "") }
+	if squash(out) != squash(src) {
+		t.Error("wrapping lost or changed text")
+	}
+}
+
+func TestWrapToggle(t *testing.T) {
+	sess := testSession()
+	sess.width, sess.height = 40, chromeLines+4
+	var doc []string
+	for i := range 10 {
+		doc = append(doc, fmt.Sprintf("line %d %s", i, strings.Repeat("x", 60)))
+	}
+	s := staticPager(sess, "MODS", "", textRender(strings.Join(doc, "\n")))
+	s, _ = sendPager(s, initResult[pagerMsg](t, s.Init()))
+	top := func() string { return strings.Fields(ansi.Strip(s.vp.View()))[1] }
+
+	for range 3 {
+		s, _ = sendPager(s, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	if top() != "3" {
+		t.Fatalf("before wrapping, top line = %q", top())
+	}
+	s, _ = sendPager(s, typed("w"))
+	if !s.wrapped || !sess.wrap || top() != "3" {
+		t.Errorf("after w: wrapped=%v top line = %q, want line 3 still on top", s.wrapped, top())
+	}
+	if !strings.Contains(s.View(), "w unwrap") || strings.Contains(s.View(), "←/→ pan") {
+		t.Errorf("wrapped help:\n%s", s.View())
+	}
+	s, _ = sendPager(s, tea.KeyMsg{Type: tea.KeyRight})
+	if !strings.HasPrefix(strings.TrimSpace(ansi.Strip(s.vp.View())), "line 3 ") {
+		t.Error("→ should do nothing while wrapped")
+	}
+	s, _ = sendPager(s, typed("w"))
+	if s.wrapped || top() != "3" {
+		t.Errorf("after unwrapping: wrapped=%v top line = %q", s.wrapped, top())
+	}
+}
+
+func TestReturningToAPagerAppliesWrap(t *testing.T) {
+	a := testApp()
+	a.sess.width, a.sess.height = 40, 30
+	long := textRender(strings.Repeat("y", 100))
+	a, _ = sendApp(a, pushMsg{staticPager(a.sess, "MODS", "", long)})
+	a, _ = sendApp(a, initResult[pagerMsg](t, a.top().Init()))
+	a, _ = sendApp(a, pushMsg{staticPager(a.sess, "METS", "", long)})
+	a, _ = sendApp(a, initResult[pagerMsg](t, a.top().Init()))
+	a, _ = sendApp(a, typed("w")) // wrap on, in the METS pager
+	a, _ = sendApp(a, popMsg{})   // back to MODS
+	if pg := a.top().(pagerScreen); !pg.wrapped {
+		t.Error("the MODS pager should pick up wrap when revealed")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // screenSeq numbers screens so an async result is only applied by the screen
@@ -66,6 +67,9 @@ type pagerScreen struct {
 	prob    problem
 	spinner spinner.Model
 	vp      viewport.Model
+
+	wrapped bool  // whether the content was last laid out wrapped
+	starts  []int // while wrapped: first view line of each document line
 }
 
 type pagerMsg struct {
@@ -151,6 +155,12 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		case "end", "G":
 			s.vp.GotoBottom()
 			return s, nil
+		case "w":
+			s.sess.wrap = !s.sess.wrap
+			if s.state == loaded {
+				s.layout()
+			}
+			return s, nil
 		}
 		var cmd tea.Cmd
 		s.vp, cmd = s.vp.Update(msg)
@@ -160,10 +170,84 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 }
 
 // layout sizes the viewport to the terminal and re-renders into it.
+//
+// With wrap on, long lines fold under their own indent and there is nothing
+// to pan; with it off they are cut at the edge and ←/→ pans. Either way the
+// source line at the top of the view stays at the top.
 func (s *pagerScreen) layout() {
-	s.vp.Width = max(s.sess.width-1, 0) // the app keeps clear of the last column
-	s.vp.Height = bodyHeight(s.sess)
-	s.vp.SetContent(s.render(s.sess.width))
+	top := s.sourceLine(s.vp.YOffset)
+	width := max(s.sess.width-1, 0) // the app keeps clear of the last column
+	text := s.render(s.sess.width)
+
+	s.vp.Width, s.vp.Height = width, bodyHeight(s.sess)
+	s.wrapped = s.sess.wrap && width > 0
+	if s.wrapped {
+		text, s.starts = wrapLines(text, width)
+		s.vp.SetXOffset(0)
+		s.vp.SetHorizontalStep(0)
+	} else {
+		s.starts = nil
+		s.vp.SetHorizontalStep(panStep)
+	}
+	s.vp.SetContent(text)
+	s.vp.SetYOffset(s.displayLine(top))
+}
+
+// sourceLine maps a line of the view back to the line of the document it
+// shows; displayLine maps the other way. They differ only while wrapping.
+func (s pagerScreen) sourceLine(display int) int {
+	if s.starts == nil {
+		return display
+	}
+	src := 0
+	for i, start := range s.starts {
+		if start > display {
+			break
+		}
+		src = i
+	}
+	return src
+}
+
+func (s pagerScreen) displayLine(src int) int {
+	if s.starts == nil {
+		return src
+	}
+	return s.starts[min(src, len(s.starts)-1)]
+}
+
+// wrapLines folds each line of text to width, continuing under the line's own
+// indent (plus two) so nested XML still reads as nested. starts[i] is the
+// index of the first wrapped line of source line i.
+func wrapLines(text string, width int) (string, []int) {
+	src := strings.Split(text, "\n")
+	starts := make([]int, len(src))
+	var out []string
+	for i, line := range src {
+		starts[i] = len(out)
+		if ansi.StringWidth(line) <= width {
+			out = append(out, line)
+			continue
+		}
+		plain := ansi.Strip(line)
+		indent := len(plain) - len(strings.TrimLeft(plain, " "))
+		hang := indent + 2
+		if width-hang < 20 { // too deep to indent usefully
+			indent, hang = 0, 0
+		}
+		first := ansi.Wrap(ansi.TruncateLeft(line, indent, ""), width-indent, "")
+		for j, part := range strings.Split(first, "\n") {
+			if j == 0 {
+				out = append(out, strings.Repeat(" ", indent)+part)
+				continue
+			}
+			// Continuation lines get the narrower hanging width.
+			for _, p := range strings.Split(ansi.Wrap(part, width-hang, ""), "\n") {
+				out = append(out, strings.Repeat(" ", hang)+p)
+			}
+		}
+	}
+	return strings.Join(out, "\n"), starts
 }
 
 func (s pagerScreen) crumb() string { return s.title }
@@ -176,7 +260,10 @@ func (s pagerScreen) View() string {
 	case failed:
 		return head + s.prob.view(s.sess.width, "go back")
 	}
-	help := "↑/↓ scroll · ←/→ pan · esc to go back"
+	help := "↑/↓ scroll · ←/→ pan · w wrap · esc to go back"
+	if s.wrapped {
+		help = "↑/↓ scroll · w unwrap · esc to go back"
+	}
 	if !(s.vp.AtTop() && s.vp.AtBottom()) {
 		help = fmt.Sprintf("%3.0f%% · ", s.vp.ScrollPercent()*100) + help
 	}

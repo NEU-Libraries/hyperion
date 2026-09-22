@@ -53,6 +53,10 @@ type session struct {
 
 	width, height int
 
+	// wrap is whether pagers fold long lines; toggled with w, it carries over
+	// to every pager for the rest of the session.
+	wrap bool
+
 	// farewell is printed to the terminal after the TUI exits — the export
 	// summary, which would otherwise vanish with the alternate screen.
 	farewell string
@@ -121,6 +125,13 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 		a.stack = a.below()
+		// The revealed screen missed any resize (and wrap toggle) while it was
+		// covered; hand it the current size so it lays itself out again.
+		if a.sess.width > 0 {
+			s, cmd := a.top().Update(tea.WindowSizeMsg{Width: a.sess.width, Height: a.sess.height})
+			a.stack = append(a.below(), s)
+			return a, cmd
+		}
 		return a, nil
 	}
 

@@ -130,6 +130,11 @@ look up each title as its row scrolls into view. Atlas has no route that lists
 a FileSet's files, so a FileSet opened from its Work's FileSets carries them in
 a Files section; opened by PID, it has none.
 
+Documents (MODS, METS, the record, Atlas's error responses) open in a pager.
+MODS is highlighted as XML and METS as JSON. Long lines are cut at the edge and
+`←`/`→` pans them; `w` wraps them instead, and the choice carries over to every
+pager until you quit. `↑`/`↓` scroll, and `g`/`G` jump to the top and bottom.
+
 ### Export
 
 1. Resolves the container (`GET /collections/:id` or `/compilations/:id`) to
