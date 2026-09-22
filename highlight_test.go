@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
@@ -113,5 +114,24 @@ func TestPagerCutsTabbedLinesInsteadOfWrapping(t *testing.T) {
 	}
 	if len(shown) != 2 || !strings.HasPrefix(shown[1], "    <mods:identifier") {
 		t.Errorf("two long lines should show as two cut lines, got %q", shown)
+	}
+}
+
+func TestPagerPans(t *testing.T) {
+	sess := testSession()
+	sess.width, sess.height = 20, 30
+	s := staticPager(sess, "MODS", "", textRender("0123456789abcdefghijklmnopqrstuvwxyz"))
+	s, _ = sendPager(s, initResult[pagerMsg](t, s.Init()))
+	first := func() string { return strings.TrimSpace(strings.Split(ansi.Strip(s.vp.View()), "\n")[0]) }
+	if got := first(); got != "0123456789abcdefghi" {
+		t.Fatalf("before panning: %q", got)
+	}
+	s, _ = sendPager(s, tea.KeyMsg{Type: tea.KeyRight})
+	if got := first(); !strings.HasPrefix(got, "89abc") {
+		t.Errorf("→ should pan %d columns, view starts %q", panStep, got)
+	}
+	s, _ = sendPager(s, tea.KeyMsg{Type: tea.KeyLeft})
+	if got := first(); !strings.HasPrefix(got, "0123") {
+		t.Errorf("← should pan back, view starts %q", got)
 	}
 }

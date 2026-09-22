@@ -75,11 +75,18 @@ type pagerMsg struct {
 }
 
 func newPagerScreen(sess *session, title, about string, load func(context.Context, *atlas.Client) (renderFunc, error)) pagerScreen {
+	// The viewport pans ←/→ by its horizontal step, which starts at zero —
+	// panning is off until it is set.
+	vp := viewport.New(0, 0)
+	vp.SetHorizontalStep(panStep)
 	return pagerScreen{
 		sess: sess, id: nextScreenID(), title: title, about: about, load: load,
-		spinner: newSpinner(), vp: viewport.New(0, 0),
+		spinner: newSpinner(), vp: vp,
 	}
 }
+
+// panStep is how many columns ←/→ moves a pager's view.
+const panStep = 8
 
 // staticPager is a pager whose content needs no request.
 func staticPager(sess *session, title, about string, render renderFunc) pagerScreen {
