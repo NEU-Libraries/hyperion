@@ -151,15 +151,15 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // headerLines is how many lines the app header takes above every screen once
-// signed in: the title, the user, the navigation trail, and a gap.
-const headerLines = 4
+// signed in: the title, the user, a gap, the navigation trail, and a gap.
+const headerLines = 5
 
 func (a app) View() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
 	if a.sess.user.NUID != "" {
 		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("Signed in as %s (NUID %s)\n", a.sess.user.Name, a.sess.user.NUID))
-		b.WriteString(a.trail() + "\n")
+		b.WriteString("\n" + a.trail() + "\n")
 	}
 	b.WriteString("\n" + a.top().View() + "\n")
 
