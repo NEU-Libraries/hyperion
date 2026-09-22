@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -23,6 +24,7 @@ var (
 	ErrUnauthorized = errors.New("token rejected by Atlas (expired, revoked, or malformed)")
 	ErrForbidden    = errors.New("not readable with this token")
 	ErrNotFound     = errors.New("not found")
+	ErrGone         = errors.New("tombstoned")
 )
 
 // Client talks to one Atlas instance as one token-bearing user.
@@ -103,12 +105,12 @@ func (c *Client) ResolveCollection(ctx context.Context, id string) (Container, e
 			Title string `json:"title"`
 		} `json:"collection"`
 	}
-	if err := c.getJSON(ctx, "/collections/"+id, &wrap); err != nil {
+	if err := c.getJSON(ctx, "/collections/"+url.PathEscape(id), &wrap); err != nil {
 		return Container{}, err
 	}
 
-	var noids []string
-	if err := c.getJSON(ctx, "/collections/"+id+"/children", &noids); err != nil {
+	noids, err := c.Children(ctx, TypeCollection, id)
+	if err != nil {
 		return Container{}, err
 	}
 	members := make([]Member, len(noids))
@@ -126,31 +128,17 @@ func (c *Client) ResolveSet(ctx context.Context, id string) (Container, error) {
 			Title string `json:"title"`
 		} `json:"compilation"`
 	}
-	if err := c.getJSON(ctx, "/compilations/"+id, &wrap); err != nil {
+	if err := c.getJSON(ctx, "/compilations/"+url.PathEscape(id), &wrap); err != nil {
 		return Container{}, err
 	}
 
-	var members []Member
-	for page := 1; ; page++ {
-		var res struct {
-			Contents []struct {
-				NOID  string `json:"noid"`
-				Title string `json:"title"`
-			} `json:"contents"`
-			Pagination struct {
-				Pages int `json:"pages"`
-			} `json:"pagination"`
-		}
-		path := fmt.Sprintf("/compilations/%s/contents?page=%d&per_page=100", id, page)
-		if err := c.getJSON(ctx, path, &res); err != nil {
-			return Container{}, err
-		}
-		for _, d := range res.Contents {
-			members = append(members, Member{NOID: d.NOID, Title: d.Title})
-		}
-		if len(res.Contents) == 0 || page >= res.Pagination.Pages {
-			break
-		}
+	contents, err := c.SetContents(ctx, id)
+	if err != nil {
+		return Container{}, err
+	}
+	members := make([]Member, len(contents))
+	for i, d := range contents {
+		members[i] = Member{NOID: d.NOID, Title: d.Title}
 	}
 	return Container{Kind: Set, NOID: id, Title: title(wrap.Compilation.Title), Members: members}, nil
 }
@@ -158,7 +146,7 @@ func (c *Client) ResolveSet(ctx context.Context, id string) (Container, error) {
 // MODS fetches a member's descriptive MODS XML by NOID via the type-agnostic
 // /resources/:id/mods route (the .xml extension selects the format).
 func (c *Client) MODS(ctx context.Context, noid string) ([]byte, error) {
-	return c.get(ctx, "/resources/"+noid+"/mods.xml")
+	return c.get(ctx, "/resources/"+url.PathEscape(noid)+"/mods.xml")
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, out any) error {
@@ -213,6 +201,8 @@ func statusError(path string, status int, body []byte) error {
 		return ErrForbidden
 	case http.StatusNotFound:
 		return ErrNotFound
+	case http.StatusGone:
+		return ErrGone
 	default:
 		return fmt.Errorf("atlas: GET %s → HTTP %d: %s", path, status, snippet(body))
 	}
