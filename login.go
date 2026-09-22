@@ -197,16 +197,18 @@ func (s loginScreen) authCmd() tea.Cmd {
 }
 
 func (s loginScreen) View() string {
+	title := titleStyle.Render("Sign in to Atlas")
 	switch s.state {
 	case loginURL:
-		return s.urlInput.View() + "\n\n" + dimStyle.Render("enter to continue · esc to quit")
+		return panel(s.sess, title, s.urlInput.View(), "enter to continue · esc to quit")
 	case loginToken:
-		return dimStyle.Render(`From DRS → My DRS → "Programmatic access" → Generate token.`) + "\n" +
-			s.tokenInput.View() + "\n\n" + dimStyle.Render("enter to continue · esc to quit")
+		return panel(s.sess, title,
+			dimStyle.Render(`Generate a token in DRS → My DRS → "Programmatic access".`)+"\n\n"+s.tokenInput.View(),
+			"enter to continue · esc to quit")
 	case loginAuth:
-		return s.spinner.View() + " Authenticating…"
+		return panel(s.sess, title, s.spinner.View()+" Signing in…", "")
 	default:
-		return s.prob.view(s.sess.cols(), "enter to try again · esc to quit")
+		return s.prob.panel(s.sess, title, "enter to try again · esc to quit")
 	}
 }
 

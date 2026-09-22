@@ -140,8 +140,9 @@ func TestExportWarnsBeforeReplacingFiles(t *testing.T) {
 	s.outDir, s.state = dir, exportResolving
 	s, _ = sendExport(s, resolvedMsg{kind: atlas.Set, pid: "s1", container: atlas.Container{Kind: atlas.Set, Title: "Reading list",
 		Members: []atlas.Member{{NOID: "a"}, {NOID: "b"}, {NOID: "c"}}}})
-	if want := dir + " already has 2 of these files; they will be replaced."; !strings.Contains(ansi.Strip(s.View()), want) {
-		t.Errorf("confirm should warn %q:\n%s", want, ansi.Strip(s.View()))
+	flat := strings.Join(strings.Fields(unframe(ansi.Strip(s.View()))), " ")
+	if want := dir + " already has 2 of these files; they will be replaced."; !strings.Contains(flat, want) {
+		t.Errorf("confirm should warn %q, wrapped whole:\n%s", want, ansi.Strip(s.View()))
 	}
 }
 

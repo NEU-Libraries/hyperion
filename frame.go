@@ -72,6 +72,25 @@ func frameWidth(sess *session) int {
 	return 100
 }
 
+// panel is a screen's usual shape: its content framed under title, full
+// width, with the key help below the frame ("" for none).
+func panel(sess *session, title, body, keys string) string {
+	out := frame(title, body, frameWidth(sess), 0, true)
+	if keys != "" {
+		out += "\n\n" + dimStyle.Render(keys)
+	}
+	return out
+}
+
+// wrapEach wraps each line of text to width on its own, keeping its styling.
+func wrapEach(text string, width int) string {
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		lines[i] = wrapped(lipgloss.NewStyle(), l, width)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // sideBySide joins two panels into one row, a space apart.
 func sideBySide(left, right string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, " ", right)

@@ -57,7 +57,7 @@ func (s pidPromptScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 func (s pidPromptScreen) crumb() string { return "Inspect" }
 
 func (s pidPromptScreen) View() string {
-	return "Inspect an object\n\n" + s.input.View() + "\n\n" + dimStyle.Render("enter to inspect · esc to go back")
+	return panel(s.sess, titleStyle.Render("Inspect an object"), s.input.View(), "enter to inspect · esc to go back")
 }
 
 // objectScreen shows one resolved object: its type, title, and ancestor
@@ -154,9 +154,9 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 func (s objectScreen) View() string {
 	switch s.state {
 	case loading:
-		return s.spinner.View() + " Resolving PID " + s.pid + "…"
+		return panel(s.sess, titleStyle.Render("PID "+s.pid), s.spinner.View()+" Looking it up…", "")
 	case failed:
-		return s.prob.view(s.sess.cols(), backKeys)
+		return s.prob.panel(s.sess, titleStyle.Render("PID "+s.pid), backKeys)
 	}
 	cols := frameWidth(s.sess)
 

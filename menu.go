@@ -53,6 +53,6 @@ func (s menuScreen) View() string {
 	for i, it := range s.items {
 		labels[i] = it.label
 	}
-	return "What would you like to do?\n\n" + menuView(labels, s.sel) +
-		"\n" + dimStyle.Render("↑/↓ to move · enter to select · q to quit")
+	return panel(s.sess, titleStyle.Render("What would you like to do?"), menuView(labels, s.sel),
+		"↑/↓ to move · enter to select · q to quit")
 }

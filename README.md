@@ -66,7 +66,10 @@ screen (going back from an export error keeps what you entered); `q` on the
 main menu, or `ctrl+c` anywhere, quits.
 
 Hyperion takes over the whole terminal while it runs, and a trail under your name
-shows where you are (`Inspect › Work w1 › FileSets › FileSet fs1`). When
+shows where you are (`Inspect › Work w1 › FileSets › FileSet fs1`). Each screen's
+content sits in a titled panel, with its keys listed underneath; on an object's
+overview the Sections panel and a Record preview sit side by side when the
+terminal is wide enough. When
 something fails, the screen says what it was doing and why in plain words, with
 a line of technical detail for a bug report; if Atlas sent an error response,
 `d` shows it in full. An export's summary stays on the terminal after you quit.

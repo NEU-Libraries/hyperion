@@ -48,7 +48,7 @@ func TestExplainServerError(t *testing.T) {
 		t.Error("the full response should be kept for the d key")
 	}
 
-	v := p.view(60, "go back")
+	v := p.body(60)
 	if strings.Contains(v, `"status":500`) {
 		t.Errorf("the raw body leaked into the panel:\n%s", v)
 	}
@@ -57,8 +57,8 @@ func TestExplainServerError(t *testing.T) {
 			t.Errorf("line wider than 60: %q", line)
 		}
 	}
-	if !strings.Contains(v, "d to see Atlas's full response") {
-		t.Errorf("panel should offer d:\n%s", v)
+	if k := p.keys(backKeys); k != "d to see Atlas's full response · "+backKeys {
+		t.Errorf("keys should offer d: %q", k)
 	}
 }
 

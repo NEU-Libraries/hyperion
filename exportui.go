@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type exportState int
@@ -74,12 +75,10 @@ func newExportScreen(sess *session) exportScreen {
 	pid.CharLimit = 64
 
 	out := textinput.New()
-	out.Prompt = "Save to: "
+	out.Prompt = "Folder: "
 
 	prog := progress.New(progress.WithDefaultGradient())
-	if sess.width > 0 {
-		prog.Width = min(sess.width-4, 60)
-	}
+	prog.Width = min(frameWidth(sess)-frameCols, 60) // inside the frame
 	return exportScreen{sess: sess, pidInput: pid, outInput: out, spinner: newSpinner(), prog: prog}
 }
 
@@ -88,7 +87,7 @@ func (s exportScreen) Init() tea.Cmd { return nil }
 func (s exportScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		s.prog.Width = min(msg.Width-4, 60)
+		s.prog.Width = min(frameWidth(s.sess)-frameCols, 60)
 		return s, nil
 	case tea.KeyMsg:
 		return s.handleKey(msg)
@@ -272,38 +271,42 @@ func waitForProgress(sub chan export.Progress) tea.Cmd {
 }
 
 func (s exportScreen) View() string {
+	title := titleStyle.Render(s.crumb())
 	switch s.state {
 	case exportType:
-		return "Export the MODS of every member of a…\n\n" + menuView([]string{"Collection", "Set"}, s.kindIdx) +
-			"\n" + dimStyle.Render("↑/↓ to move · enter to select · esc to go back")
+		return panel(s.sess, title, "Export the MODS of every member of a…\n\n"+
+			strings.TrimRight(menuView([]string{"Collection", "Set"}, s.kindIdx), "\n"),
+			"↑/↓ to move · enter to select · esc to go back")
 	case exportPID:
-		return fmt.Sprintf("Which %s? Enter its PID.\n\n", strings.ToLower(s.kindName())) + s.pidInput.View() +
-			"\n\n" + dimStyle.Render("enter to continue · esc to go back")
+		return panel(s.sess, title, fmt.Sprintf("Which %s? Enter its PID.\n\n", strings.ToLower(s.kindName()))+s.pidInput.View(),
+			"enter to continue · esc to go back")
 	case exportOut:
-		return "Save the MODS files in this folder:\n\n" + s.outInput.View() +
-			"\n\n" + dimStyle.Render("enter to continue · esc to go back")
+		return panel(s.sess, title, "Save the MODS files in this folder:\n\n"+s.outInput.View(),
+			"enter to continue · esc to go back")
 	case exportResolving:
-		return fmt.Sprintf("%s Looking up %s %s…", s.spinner.View(), s.kindName(), s.pidInput.Value())
+		return panel(s.sess, title, fmt.Sprintf("%s Looking up %s %s…", s.spinner.View(), s.kindName(), s.pidInput.Value()), "")
 	case exportConfirm:
-		return s.viewConfirm()
+		return panel(s.sess, title, s.viewConfirm(), "y to export · n to go back")
 	case exportDownloading:
-		return s.viewDownloading()
+		return panel(s.sess, title, s.viewDownloading(), "ctrl+c stops the export and quits Hyperion")
 	case exportDone:
-		return s.viewDone()
+		return panel(s.sess, title, wrapEach(s.summary(), frameWidth(s.sess)-frameCols), backKeys)
 	default:
-		return s.prob.view(s.sess.cols(), backKeys)
+		return s.prob.panel(s.sess, title, backKeys)
 	}
 }
 
+// viewConfirm asks before exporting. Its sentences carry a folder path of
+// any length, so they wrap inside the frame rather than being cut.
 func (s exportScreen) viewConfirm() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Export %s from %q to %s?", plural(s.total, "MODS file"), s.container.Title, s.outDir)
+	width := frameWidth(s.sess) - frameCols
+	out := wrapped(lipgloss.NewStyle(),
+		fmt.Sprintf("Export %s from %q to %s?", plural(s.total, "MODS file"), s.container.Title, s.outDir), width)
 	if s.existing > 0 {
-		b.WriteString("\n\n" + warnStyle.Render(fmt.Sprintf("⚠ %s already has %d of these files; they will be replaced.",
-			s.outDir, s.existing)))
+		out += "\n\n" + wrapped(warnStyle,
+			fmt.Sprintf("⚠ %s already has %d of these files; they will be replaced.", s.outDir, s.existing), width)
 	}
-	b.WriteString("\n\n" + dimStyle.Render("y to export · n to go back"))
-	return b.String()
+	return out
 }
 
 func (s exportScreen) viewDownloading() string {
@@ -311,14 +314,9 @@ func (s exportScreen) viewDownloading() string {
 	if s.total > 0 {
 		ratio = float64(s.completed) / float64(s.total)
 	}
-	return fmt.Sprintf("Exporting MODS…\n\n%s\n%s\n\n%s",
+	return fmt.Sprintf("Exporting MODS…\n\n%s\n%s",
 		s.prog.ViewAs(ratio),
-		dimStyle.Render(fmt.Sprintf("%d of %d", s.completed, s.total)),
-		dimStyle.Render("ctrl+c stops the export and quits Hyperion"))
-}
-
-func (s exportScreen) viewDone() string {
-	return s.summary() + "\n\n" + dimStyle.Render(backKeys)
+		dimStyle.Render(fmt.Sprintf("%d of %d", s.completed, s.total)))
 }
 
 // summary tallies the finished export. It is also left on the terminal when

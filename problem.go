@@ -85,12 +85,12 @@ func statusReason(status int) string {
 	}
 }
 
-// backKeys is the usual way off an error screen.
+// backKeys is the usual way off an error or summary screen.
 const backKeys = "enter or esc to go back"
 
-// view renders the problem wrapped to width (0 = unwrapped), ending with the
-// screen's way out (keys, e.g. backKeys) and, when Atlas sent a response, d.
-func (p problem) view(width int, keys string) string {
+// body renders the problem wrapped to width (0 = unwrapped): what failed,
+// why, and the technical detail.
+func (p problem) body(width int) string {
 	wrap := func(s string, indent int) string {
 		if width <= indent+10 {
 			return strings.Repeat(" ", indent) + s
@@ -99,18 +99,28 @@ func (p problem) view(width int, keys string) string {
 	}
 	var b strings.Builder
 	b.WriteString(errStyle.Render("✗ ") + p.headline + "\n")
-	b.WriteString(wrap(p.reason, 2) + "\n")
+	b.WriteString(wrap(p.reason, 2))
 	if len(p.details) > 0 {
 		b.WriteString("\n")
 		for _, d := range p.details {
-			b.WriteString(dimStyle.Render(wrap(d, 2)) + "\n")
+			b.WriteString("\n" + dimStyle.Render(wrap(d, 2)))
 		}
 	}
-	if p.raw != nil {
-		keys = "d to see Atlas's full response · " + keys
-	}
-	b.WriteString("\n" + dimStyle.Render(keys))
 	return b.String()
+}
+
+// keys is the problem screen's key help: the way out (back, e.g.
+// backKeys) and, when Atlas sent a response, d.
+func (p problem) keys(back string) string {
+	if p.raw != nil {
+		return "d to see Atlas's full response · " + back
+	}
+	return back
+}
+
+// panel frames the problem under title, with its keys below.
+func (p problem) panel(sess *session, title, back string) string {
+	return panel(sess, title, p.body(frameWidth(sess)-frameCols), p.keys(back))
 }
 
 // problemKey handles a key press on a screen showing p: d opens Atlas's full
