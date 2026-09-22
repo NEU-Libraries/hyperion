@@ -1,7 +1,9 @@
-// Command hyperion bulk-exports the MODS of every member of a DRS Collection or
-// Set — one <pid>.xml per member. With no --type/--pid it runs an interactive
-// TUI; given both it runs headless. Auth is a personal-access token in the
-// environment (ATLAS_URL + ATLAS_JWT), atlas_rb's BYO-JWT contract in Go.
+// Command hyperion inspects Digital Repository Service objects in Atlas and
+// bulk-exports the MODS of a Collection or Set. With no arguments it runs an
+// interactive TUI; `hyperion get` prints any object's raw Atlas response, and
+// `hyperion export` (or the bare --type/--pid flags) exports headless. Auth is
+// a personal-access token in the environment (ATLAS_URL + ATLAS_JWT),
+// atlas_rb's BYO-JWT contract in Go.
 //
 // User-facing text calls the identifiers "PIDs" (the DRS/Cerberus convention);
 // internally they are the resource NOIDs.
@@ -12,6 +14,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -21,17 +24,53 @@ import (
 
 const version = "2.0.0"
 
-func main() { os.Exit(run(os.Args[1:])) }
+// Exit statuses. notFound lets a script ask whether a PID exists.
+const (
+	exitOK       = 0
+	exitFailed   = 1
+	exitUsage    = 2
+	exitNotFound = 3
+)
 
-func run(args []string) int {
+func main() {
+	c := cli{stdout: os.Stdout, stderr: os.Stderr, getenv: os.Getenv, stdoutIsTerminal: isTerminal(os.Stdout)}
+	os.Exit(c.run(os.Args[1:]))
+}
+
+// cli is one invocation: where output goes and where settings come from, so
+// the commands can be driven from tests.
+type cli struct {
+	stdout, stderr   io.Writer
+	getenv           func(string) string
+	stdoutIsTerminal bool
+}
+
+func (c cli) run(args []string) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "get":
+			return c.get(args[1:])
+		case "export":
+			return c.export(args[1:], true)
+		}
+	}
+	// No subcommand: the TUI, or — given --type and --pid — the headless
+	// export, as before subcommands existed.
+	return c.export(args, false)
+}
+
+// export runs the headless export. Without a subcommand (explicit false) it
+// is the default entry point, and falls through to the TUI unless both
+// --type and --pid are given.
+func (c cli) export(args []string, explicit bool) int {
 	var (
 		kindStr, pid, outDir, urlFlag string
 		concurrency                   int
 		showVersion                   bool
 	)
 	fs := flag.NewFlagSet("hyperion", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	fs.Usage = func() { usage() }
+	fs.SetOutput(c.stderr)
+	fs.Usage = func() { c.usage() }
 	strVar(fs, &kindStr, "collection or set", "type", "t")
 	strVar(fs, &pid, "container PID", "pid", "p")
 	strVar(fs, &outDir, "output directory (default ./<pid>-mods)", "out", "o")
@@ -43,68 +82,88 @@ func run(args []string) int {
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			return 0
+			return exitOK
 		}
-		return 2
+		return exitUsage
 	}
 	if showVersion {
-		fmt.Println("hyperion " + version)
-		return 0
+		fmt.Fprintln(c.stdout, "hyperion "+version)
+		return exitOK
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintf(c.stderr, "hyperion: unexpected %q — see hyperion --help\n", fs.Arg(0))
+		return exitUsage
 	}
 
-	url := firstNonEmpty(urlFlag, os.Getenv("ATLAS_URL"))
-	token := os.Getenv("ATLAS_JWT")
-
-	// Headless (both --type and --pid): credentials must already be present —
-	// a script can't be prompted. Interactive: the TUI prompts for whatever's
-	// missing, so `./hyperion` works with nothing set up.
-	if kindStr != "" && pid != "" {
-		if url == "" {
-			fmt.Fprintln(os.Stderr, "hyperion: no Atlas URL — set ATLAS_URL or pass --url")
-			return 1
-		}
-		if token == "" {
-			fmt.Fprintln(os.Stderr, `hyperion: no access token — set ATLAS_JWT (from DRS → My DRS → "Programmatic access")`)
-			return 1
-		}
-		kind, err := parseKind(kindStr)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "hyperion:", err)
-			return 1
-		}
-		return headless(atlas.New(url, token), kind, pid, outDir, concurrency)
+	url := firstNonEmpty(urlFlag, c.getenv("ATLAS_URL"))
+	token := c.getenv("ATLAS_JWT")
+	if !explicit && (kindStr == "" || pid == "") {
+		return runTUI(url, token, concurrency)
 	}
-	return runTUI(url, token, concurrency)
+	if kindStr == "" || pid == "" {
+		fmt.Fprintln(c.stderr, "hyperion export: --type and --pid are both required")
+		return exitUsage
+	}
+
+	// Headless: credentials must already be present — a script can't be
+	// prompted.
+	client, code := c.client(url, token)
+	if client == nil {
+		return code
+	}
+	kind, err := parseKind(kindStr)
+	if err != nil {
+		fmt.Fprintln(c.stderr, "hyperion:", err)
+		return exitUsage
+	}
+	return c.headlessExport(client, kind, pid, outDir, concurrency)
 }
 
-func headless(client *atlas.Client, kind atlas.Kind, pid, outDir string, concurrency int) int {
+// client builds the Atlas client for a headless command, or reports which
+// setting is missing.
+func (c cli) client(url, token string) (*atlas.Client, int) {
+	if url == "" {
+		fmt.Fprintln(c.stderr, "hyperion: no Atlas URL — set ATLAS_URL or pass --url")
+		return nil, exitUsage
+	}
+	if token == "" {
+		fmt.Fprintln(c.stderr, `hyperion: no access token — set ATLAS_JWT (from DRS → My DRS → "Programmatic access")`)
+		return nil, exitUsage
+	}
+	return atlas.New(url, token), exitOK
+}
+
+func (c cli) headlessExport(client *atlas.Client, kind atlas.Kind, pid, outDir string, concurrency int) int {
 	ctx := context.Background()
 	if _, err := client.Whoami(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "hyperion:", explain("Couldn't sign in to Atlas.", err).text())
-		return 1
+		fmt.Fprintln(c.stderr, "hyperion:", explain("Couldn't sign in to Atlas.", err).text())
+		return exitFailed
 	}
 	container, err := resolve(ctx, client, kind, pid)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "hyperion:", resolveProblem(err, kind, pid).text())
-		return 1
+		fmt.Fprintln(c.stderr, "hyperion:", resolveProblem(err, kind, pid).text())
+		if errors.Is(err, atlas.ErrNotFound) {
+			return exitNotFound
+		}
+		return exitFailed
 	}
 	if len(container.Members) == 0 {
-		fmt.Fprintln(os.Stderr, "hyperion: no readable members to export.")
-		return 1
+		fmt.Fprintln(c.stderr, "hyperion: no readable members to export.")
+		return exitFailed
 	}
 	if outDir == "" {
 		outDir = "./" + pid + "-mods"
 	}
-	fmt.Fprintf(os.Stderr, "Exporting %d MODS record(s) from %q → %s\n", len(container.Members), container.Title, outDir)
+	fmt.Fprintf(c.stderr, "Exporting %d MODS record(s) from %q → %s\n", len(container.Members), container.Title, outDir)
 	res, _ := export.Download(ctx, client, container.Members, outDir, concurrency, nil)
-	fmt.Fprintf(os.Stderr, "Saved %d; failed %d.\n", len(res.Saved), len(res.Failed))
+	fmt.Fprintf(c.stderr, "Saved %d; failed %d.\n", len(res.Saved), len(res.Failed))
 	for noid, e := range res.Failed {
-		fmt.Fprintf(os.Stderr, "  %s: %s\n", noid, briefError(e))
+		fmt.Fprintf(c.stderr, "  %s: %s\n", noid, briefError(e))
 	}
 	if len(res.Failed) > 0 {
-		return 1
+		return exitFailed
 	}
-	return 0
+	return exitOK
 }
 
 func resolve(ctx context.Context, client *atlas.Client, kind atlas.Kind, pid string) (atlas.Container, error) {
@@ -165,18 +224,26 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-func usage() {
-	fmt.Fprintf(os.Stderr, `hyperion %s — export a DRS Collection or Set's MODS
+// isTerminal reports whether f is a terminal rather than a pipe or file.
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func (c cli) usage() {
+	fmt.Fprintf(c.stderr, `hyperion %s — inspect DRS objects in Atlas, and export MODS
 
 Usage:
   hyperion                                  interactive
-  hyperion --type collection --pid <PID>    headless
+  hyperion get <PID> [SECTION] [flags]      print Atlas's raw response
+  hyperion export --type TYPE --pid <PID>   export a Collection or Set's MODS
+  hyperion --type TYPE --pid <PID>          the same export, the older form
 
 Auth comes from the environment:
   ATLAS_URL   Atlas base URL
   ATLAS_JWT   personal access token (DRS → My DRS → "Programmatic access")
 
-Flags:
+Export flags:
   -t, --type TYPE       collection or set
   -p, --pid PID         container PID
   -o, --out DIR         output directory (default ./<pid>-mods)
@@ -184,5 +251,9 @@ Flags:
       --url URL         Atlas base URL (default $ATLAS_URL)
   -v, --version         print version
   -h, --help            show this help
+
+Run hyperion get --help for its sections and flags.
+
+Exit status: 0 success, 1 failure, 2 usage, 3 no such PID.
 `, version)
 }

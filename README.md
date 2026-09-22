@@ -72,13 +72,45 @@ a line of technical detail for a bug report; if Atlas sent an error response,
 ./hyperion
 ```
 
-### Headless (scripts / cron)
+### Get: an object's raw Atlas response (scripts)
 
-Pass `--type` and `--pid` to skip the prompts (auth still comes from
-`ATLAS_URL` / `ATLAS_JWT`):
+`hyperion get` prints what Atlas returns for one object — exactly as sent, JSON
+or XML — to stdout, so it drops straight into `jq` or `xmllint`. It replaces
+hand-built cURL calls with a bearer header. Auth comes from `ATLAS_URL` /
+`ATLAS_JWT`.
 
 ```sh
-./hyperion --type collection --pid 3xsj47p --out ./coastal-mods
+./hyperion get w1 | jq -r .work.title        # the record (the default)
+./hyperion get w1 mods > w1.xml              # current MODS
+./hyperion get w1 mods --at v3               # MODS as of a retained version
+./hyperion get k1 children | jq -r '.[]'     # PIDs beneath a Collection
+```
+
+| Section | What it prints |
+| --- | --- |
+| `record` | the object's record (the default) |
+| `mods` | MODS XML; with `--at VERSION`, as of that version |
+| `mods-history` | the retained MODS versions (full admins only) |
+| `mets` | METS, for a Work or FileSet |
+| `permissions` | the access-control envelope |
+| `children` | PIDs directly beneath a Collection or Community |
+| `contents` | a Set's works, one page (`--page N`, default 1) |
+| `filesets`, `files` | a Work's FileSets with their files, or its files flattened |
+| `linked`, `associations` | the Collections a Work is linked into; its associations |
+| `ancestry`, `versions` | a File's FileSet and Work; its retained versions |
+
+Flags may come before or after the PID. Output to a pipe or file is never
+altered; on a terminal, a final newline is added if the body lacks one. Errors
+go to stderr in the same words the TUI uses. Run `./hyperion get --help` for
+the list above.
+
+### Export (scripts / cron)
+
+`hyperion export` exports a Collection or Set without the TUI. The older form —
+the same flags with no subcommand — still works.
+
+```sh
+./hyperion export --type collection --pid 3xsj47p --out ./coastal-mods
 ./hyperion -t set -p 9k41zc7 -c 8
 ```
 
@@ -91,8 +123,14 @@ Pass `--type` and `--pid` to skip the prompts (auth still comes from
 | `--url` | Atlas base URL (default `$ATLAS_URL`) |
 | `-v, --version` / `-h, --help` | |
 
-Exit status is `0` when every member exported, `1` if any failed (failures are
-listed) — so it composes in a pipeline.
+### Exit status
+
+| Status | Meaning |
+| --- | --- |
+| `0` | success (for export: every member exported) |
+| `1` | failure (for export: any member failed; failures are listed) |
+| `2` | usage: a bad flag or section, or `ATLAS_URL` / `ATLAS_JWT` unset |
+| `3` | no such PID (or, for a Collection or Set, none this token can read) |
 
 ## What it does
 
@@ -114,7 +152,7 @@ inspects — Atlas serves its record with a 410.
 | Section | Types | Atlas route |
 | --- | --- | --- |
 | Record | all | the typed record, every field |
-| MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (admin only) |
+| MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (full admins only) |
 | METS | Work, FileSet | `/works/:id/mets`, `/file_sets/:id/mets` |
 | FileSets, Files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
 | Linked collections, Associations | Work | `/works/:id/linked_members`, `/works/:id/associations` |
