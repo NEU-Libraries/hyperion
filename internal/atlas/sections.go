@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 )
 
 // The reads behind the inspector's sections: an object's relationships,
@@ -84,12 +83,12 @@ type MODSVersion struct {
 
 // Children lists the NOIDs directly beneath a Collection or Community.
 func (c *Client) Children(ctx context.Context, t Type, id string) ([]string, error) {
-	route := map[Type]string{TypeCollection: "collections", TypeCommunity: "communities"}[t]
-	if route == "" {
+	path := PathChildren(t, id)
+	if path == "" {
 		return nil, fmt.Errorf("atlas: a %s has no children route", t)
 	}
 	var noids []string
-	err := c.getJSON(ctx, "/"+route+"/"+url.PathEscape(id)+"/children", &noids)
+	err := c.getJSON(ctx, path, &noids)
 	return noids, err
 }
 
@@ -103,7 +102,7 @@ func (c *Client) SetContents(ctx context.Context, id string) ([]Digest, error) {
 				Pages int `json:"pages"`
 			} `json:"pagination"`
 		}
-		path := fmt.Sprintf("/compilations/%s/contents?page=%d&per_page=100", url.PathEscape(id), page)
+		path := PathSetContents(id, page)
 		if err := c.getJSON(ctx, path, &res); err != nil {
 			return nil, err
 		}
@@ -117,14 +116,14 @@ func (c *Client) SetContents(ctx context.Context, id string) ([]Digest, error) {
 // FileSets lists a Work's page FileSets in order, each with its assets.
 func (c *Client) FileSets(ctx context.Context, id string) ([]FileSetEntry, error) {
 	var out []FileSetEntry
-	err := c.getJSON(ctx, "/works/"+url.PathEscape(id)+"/file_sets", &out)
+	err := c.getJSON(ctx, PathFileSets(id), &out)
 	return out, err
 }
 
 // Assets lists every downloadable asset of a Work, flattened across FileSets.
 func (c *Client) Assets(ctx context.Context, id string) ([]Asset, error) {
 	var out []Asset
-	err := c.getJSON(ctx, "/works/"+url.PathEscape(id)+"/assets", &out)
+	err := c.getJSON(ctx, PathAssets(id), &out)
 	return out, err
 }
 
@@ -132,14 +131,14 @@ func (c *Client) Assets(ctx context.Context, id string) ([]Asset, error) {
 // structural parent.
 func (c *Client) LinkedCollections(ctx context.Context, id string) ([]string, error) {
 	var out []string
-	err := c.getJSON(ctx, "/works/"+url.PathEscape(id)+"/linked_members", &out)
+	err := c.getJSON(ctx, PathLinkedMembers(id), &out)
 	return out, err
 }
 
 // WorkAssociations reads a Work's associations in both directions.
 func (c *Client) WorkAssociations(ctx context.Context, id string) (Associations, error) {
 	var out Associations
-	err := c.getJSON(ctx, "/works/"+url.PathEscape(id)+"/associations", &out)
+	err := c.getJSON(ctx, PathAssociations(id), &out)
 	return out, err
 }
 
@@ -149,7 +148,7 @@ func (c *Client) FileAncestry(ctx context.Context, id string) (FileAncestry, err
 		FileSet *string `json:"file_set"`
 		Work    *string `json:"work"`
 	}
-	if err := c.getJSON(ctx, "/files/"+url.PathEscape(id)+"/ancestry", &out); err != nil {
+	if err := c.getJSON(ctx, PathFileAncestry(id), &out); err != nil {
 		return FileAncestry{}, err
 	}
 	var a FileAncestry
@@ -167,7 +166,7 @@ func (c *Client) FileVersions(ctx context.Context, id string) ([]FileVersion, er
 	var out struct {
 		Versions []FileVersion `json:"versions"`
 	}
-	err := c.getJSON(ctx, "/files/"+url.PathEscape(id)+"/versions", &out)
+	err := c.getJSON(ctx, PathFileVersions(id), &out)
 	return out.Versions, err
 }
 
@@ -178,37 +177,37 @@ func (c *Client) MODSVersions(ctx context.Context, id string) ([]MODSVersion, er
 	var out struct {
 		Versions []MODSVersion `json:"versions"`
 	}
-	err := c.getJSON(ctx, "/resources/"+url.PathEscape(id)+"/mods/versions", &out)
+	err := c.getJSON(ctx, PathMODSVersions(id), &out)
 	return out.Versions, err
 }
 
 // MODSAt fetches the raw MODS XML as of one retained version.
 func (c *Client) MODSAt(ctx context.Context, id, versionID string) ([]byte, error) {
-	return c.get(ctx, "/resources/"+url.PathEscape(id)+"/mods/versions/"+url.PathEscape(versionID))
+	return c.get(ctx, PathMODSVersion(id, versionID))
 }
 
 // METS reads the JSON projection of a Work's or FileSet's structural metadata.
 // A Work that has never been completed has none, and answers ErrNotFound.
 func (c *Client) METS(ctx context.Context, t Type, id string) (json.RawMessage, error) {
-	route := map[Type]string{TypeWork: "works", TypeFileSet: "file_sets"}[t]
-	if route == "" {
+	path := PathMETS(t, id)
+	if path == "" {
 		return nil, fmt.Errorf("atlas: a %s has no METS", t)
 	}
 	var wrap map[string]struct {
 		METS json.RawMessage `json:"mets"`
 	}
-	if err := c.getJSON(ctx, "/"+route+"/"+url.PathEscape(id)+"/mets", &wrap); err != nil {
+	if err := c.getJSON(ctx, path, &wrap); err != nil {
 		return nil, err
 	}
 	for _, v := range wrap {
 		return v.METS, nil
 	}
-	return nil, badResponse("/"+route+"/"+id+"/mets", errors.New("no METS in the response"))
+	return nil, badResponse(path, errors.New("no METS in the response"))
 }
 
 // Permissions reads a resource's ACL envelope as ordered fields.
 func (c *Client) Permissions(ctx context.Context, id string) ([]Field, error) {
-	path := "/resources/" + url.PathEscape(id) + "/permissions"
+	path := PathPermissions(id)
 	body, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err

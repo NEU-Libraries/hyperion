@@ -71,3 +71,31 @@ func TestSectionReads(t *testing.T) {
 		t.Errorf("file sets = %+v, %v", got, err)
 	}
 }
+
+func TestRawReturnsBodiesVerbatim(t *testing.T) {
+	srv := fakeAtlas(t, nil,
+		map[string]int{"/works/gone": http.StatusGone},
+		map[string]string{
+			"/works/w1":   `{"work":{"id":"w1"}}`,
+			"/works/gone": `{"work":{"id":"gone","tombstoned":true}}`,
+		})
+	c, ctx := New(srv.URL, "tok"), context.Background()
+	if got, err := c.Raw(ctx, "/works/w1"); err != nil || string(got) != `{"work":{"id":"w1"}}` {
+		t.Errorf("raw = %s, %v", got, err)
+	}
+	if got, err := c.Raw(ctx, "/works/gone"); err != nil || len(got) == 0 {
+		t.Errorf("a 410 body is still the answer: %s, %v", got, err)
+	}
+	if _, err := c.Raw(ctx, "/works/nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("missing: err = %v", err)
+	}
+}
+
+func TestPathsEscapeIDs(t *testing.T) {
+	if got := PathMODSVersion("a/b", "v 1"); got != "/resources/a%2Fb/mods/versions/v%201" {
+		t.Errorf("PathMODSVersion = %q", got)
+	}
+	if PathChildren(TypeWork, "w1") != "" || PathMETS(TypeCollection, "k1") != "" {
+		t.Error("a route that doesn't exist for a type should be empty")
+	}
+}

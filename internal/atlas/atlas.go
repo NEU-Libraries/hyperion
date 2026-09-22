@@ -134,7 +134,7 @@ func (c *Client) ResolveSet(ctx context.Context, id string) (Container, error) {
 // MODS fetches a member's descriptive MODS XML by NOID via the type-agnostic
 // /resources/:id/mods route (the .xml extension selects the format).
 func (c *Client) MODS(ctx context.Context, noid string) ([]byte, error) {
-	return c.get(ctx, "/resources/"+url.PathEscape(noid)+"/mods.xml")
+	return c.get(ctx, PathMODS(noid))
 }
 
 func (c *Client) getJSON(ctx context.Context, path string, out any) error {
