@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"hyperion/internal/atlas"
 
@@ -218,5 +219,44 @@ func TestShortTerminalKeepsTheHeaderAndScrollsTheMenu(t *testing.T) {
 	v = ansi.Strip(a.View())
 	if !strings.Contains(v, "› Permissions") || !strings.Contains(v, "↑ more") || !strings.Contains(v, "HYPERION") {
 		t.Errorf("after scrolling the menu:\n%s", v)
+	}
+}
+
+func TestRecordValuesReadAsWords(t *testing.T) {
+	prev := time.Local
+	time.Local = time.FixedZone("EDT", -4*60*60)
+	t.Cleanup(func() { time.Local = prev })
+
+	for _, c := range []struct{ key, raw, want string }{
+		{"ancestors", `[{"noid":"c0","klass":"Community","title":"Library"},{"noid":"k1","klass":"Collection","title":"Maps"}]`,
+			"Library (c0) › Maps (k1)"},
+		{"ancestors", `[]`, "none"},
+		{"file_identifiers", `[{"id":"ocfl://a/v1/x.mp3"},{"id":"ocfl://a/v2/x.mp3"}]`, "ocfl://a/v1/x.mp3, ocfl://a/v2/x.mp3"},
+		{"tombstoned_at", `"2026-09-15T20:14:55+00:00"`, "15 Sep 2026, 4:14 pm EDT"},
+		{"created_at", `"2026-09-22T21:17:49Z"`, "22 Sep 2026, 5:17 pm EDT"},
+		{"description", `"2026 was a year"`, "2026 was a year"},
+	} {
+		if got := ansi.Strip(fieldValue(c.key, []byte(c.raw), 0)); got != c.want {
+			t.Errorf("fieldValue(%s, %s) = %q, want %q", c.key, c.raw, got, c.want)
+		}
+	}
+	for key, want := range map[string]string{"type": "Classification", "personal_root": "Is a personal root",
+		"created_at": "Created", "created": "Created"} {
+		if got := fieldLabel(key); got != want {
+			t.Errorf("fieldLabel(%s) = %q, want %q", key, got, want)
+		}
+	}
+	if humanRole("service_file") != "Service file" || when("not a time") != "not a time" {
+		t.Error("humanRole / when")
+	}
+}
+
+func TestPermissionsDropTheRepeatedType(t *testing.T) {
+	sess, _ := sessionAgainst(t, map[string]string{
+		"/resources/w1/permissions": `{"resource":{"read":["public"],"type":"Work"}}`,
+	})
+	p := loadedPager(t, permissionsSection(sess, atlas.Object{Type: atlas.TypeWork, NOID: "w1"}).(pagerScreen))
+	if v := ansi.Strip(p.View()); strings.Contains(v, "Classification") || strings.Contains(v, "Type") || !strings.Contains(v, "public") {
+		t.Errorf("permissions:\n%s", v)
 	}
 }

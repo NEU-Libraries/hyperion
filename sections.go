@@ -104,7 +104,7 @@ func modsHistorySection(sess *session, obj atlas.Object) screen {
 				versionID := v.VersionID
 				items[i] = listItem{
 					title: versionID,
-					note:  joinNonEmpty(v.Created, byNUID(v.ActorNUID, v.OnBehalfOfNUID), v.Source, v.Note),
+					note:  joinNonEmpty(when(v.Created), byNUID(v.ActorNUID, v.OnBehalfOfNUID), v.Source, v.Note),
 					open: func(sess *session) screen {
 						return newPagerScreen(sess, "MODS as of "+versionID, objectContext(obj),
 							func(ctx context.Context, c *atlas.Client) (doc, error) {
@@ -148,12 +148,13 @@ func fileSetsSection(sess *session, obj atlas.Object) screen {
 func fileSetItems(sets []atlas.FileSetEntry) []listItem {
 	items := make([]listItem, len(sets))
 	for i, fs := range sets {
-		title := "No position"
+		// Named by its classification, like a FileSet's own screen.
+		title := firstNonEmpty(fs.Type, "Unclassified") + " FileSet"
+		position := ""
 		if fs.Position != nil {
-			title = fmt.Sprintf("Position %d", *fs.Position)
+			position = fmt.Sprintf("position %d", *fs.Position)
 		}
-		it := listItem{pid: fs.NOID, title: title, kind: "FileSet",
-			note: joinNonEmpty(fs.Type, plural(len(fs.Assets), "file"))}
+		it := listItem{pid: fs.NOID, title: title, note: joinNonEmpty(position, plural(len(fs.Assets), "file"))}
 		if fs.Tombstoned {
 			it.warn = "tombstoned"
 		}
@@ -179,16 +180,19 @@ func filesSection(sess *session, obj atlas.Object) screen {
 func assetItems(assets []atlas.Asset) []listItem {
 	items := make([]listItem, len(assets))
 	for i, a := range assets {
-		kind, name := "File", firstNonEmpty(a.OriginalFilename, a.Filename)
-		if a.Size == nil && a.URI != "" {
-			kind, name = "Delegate", a.URI
-		}
+		role := firstNonEmpty(a.Use, humanRole(a.Role))
 		size := ""
 		if a.Size != nil {
 			size = humanBytes(float64(*a.Size))
 		}
-		it := listItem{pid: a.NOID, title: name, kind: kind,
-			note: joinNonEmpty(firstNonEmpty(a.Role, a.Use), a.MimeType, size)}
+		it := listItem{pid: a.NOID, title: firstNonEmpty(a.OriginalFilename, a.Filename, role), kind: "File",
+			note: joinNonEmpty(role, a.MimeType, size)}
+		if a.Size == nil && a.URI != "" {
+			// A Delegate holds no bytes, only an image server address: name it
+			// by what it is for, and keep the address as detail.
+			it.title, it.kind = firstNonEmpty(role, "Image")+" (IIIF image)", "Delegate"
+			it.note = joinNonEmpty(a.MimeType, a.URI)
+		}
 		if a.Gated {
 			it.warn = "gated"
 		}
@@ -271,7 +275,7 @@ func fileVersionsSection(sess *session, obj atlas.Object) screen {
 				fields := structFields(v)
 				items[i] = listItem{
 					title: title,
-					note:  joinNonEmpty(v.Created, byNUID(v.ActorNUID, v.OnBehalfOfNUID), size),
+					note:  joinNonEmpty(when(v.Created), byNUID(v.ActorNUID, v.OnBehalfOfNUID), size),
 					open: func(sess *session) screen {
 						return staticPager(sess, title, objectContext(obj), fieldsRender(fields)).
 							withRaw(atlas.PathFileVersions(obj.NOID), stem(obj, "versions"))
@@ -332,7 +336,14 @@ func permissionsSection(sess *session, obj atlas.Object) screen {
 		if err != nil {
 			return doc{}, err
 		}
-		return doc{render: fieldsRender(fields)}, nil
+		// Atlas repeats the object's type in the envelope; the title says it.
+		kept := fields[:0:0]
+		for _, f := range fields {
+			if f.Key != "type" {
+				kept = append(kept, f)
+			}
+		}
+		return doc{render: fieldsRender(kept)}, nil
 	}).withRaw(atlas.PathPermissions(obj.NOID), stem(obj, "permissions"))
 }
 
@@ -343,6 +354,14 @@ func pidItems(noids []string, note string) []listItem {
 		items[i] = listItem{pid: n, note: note, lookup: true}
 	}
 	return items
+}
+
+// when shows a timestamp readably, or as given if it isn't one.
+func when(s string) string {
+	if h, ok := humanTime(s); ok {
+		return h
+	}
+	return s
 }
 
 // predicate turns "is_codebook_for" into "is codebook for".

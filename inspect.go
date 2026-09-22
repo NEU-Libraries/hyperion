@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"hyperion/internal/atlas"
 
@@ -319,6 +320,11 @@ var fieldLabels = map[string]string{
 	"orcid":                    "ORCID",
 	"thumbnail_2x":             "Thumbnail (2x)",
 	"personal_root_id":         "Personal root (PID)",
+	"personal_root":            "Is a personal root",
+	"type":                     "Classification", // a FileSet's; Permissions' copy is dropped
+	"created":                  "Created",
+	"created_at":               "Created",
+	"updated_at":               "Updated",
 	"affiliated_community_ids": "Affiliated communities (PIDs)",
 	"included_collections":     "Included collections (PIDs)",
 	"included_works":           "Included works (PIDs)",
@@ -337,6 +343,25 @@ func fieldLabel(key string) string {
 	return strings.ToUpper(l[:1]) + l[1:]
 }
 
+// humanTime shows an ISO-8601 timestamp as a person reads one, in local
+// time: "15 Sep 2026, 4:14 pm EDT". The raw view keeps the exact value.
+func humanTime(s string) (string, bool) {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return "", false
+	}
+	return t.Local().Format("2 Jan 2006, 3:04 pm MST"), true
+}
+
+// humanRole turns a machine role like "original_file" into "Original file".
+func humanRole(role string) string {
+	if role == "" {
+		return ""
+	}
+	r := strings.ReplaceAll(role, "_", " ")
+	return strings.ToUpper(r[:1]) + r[1:]
+}
+
 // fieldValue renders one raw JSON value on a single line of at most width
 // columns (0 = unlimited): nulls and blanks dimmed, booleans as yes/no,
 // string lists comma-joined, anything else as compact JSON.
@@ -344,6 +369,15 @@ func fieldValue(key string, raw json.RawMessage, width int) string {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return truncate(string(raw), width)
+	}
+	if key == "ancestors" {
+		var chain []atlas.Ancestor
+		if json.Unmarshal(raw, &chain) == nil {
+			if len(chain) == 0 {
+				return dimStyle.Render("none")
+			}
+			return truncate(breadcrumb(chain), width)
+		}
 	}
 	switch t := v.(type) {
 	case nil:
@@ -359,6 +393,9 @@ func fieldValue(key string, raw json.RawMessage, width int) string {
 	case string:
 		if strings.TrimSpace(t) == "" {
 			return dimStyle.Render("—")
+		}
+		if when, ok := humanTime(t); ok {
+			return truncate(when, width)
 		}
 		return truncate(t, width)
 	case float64:
@@ -381,6 +418,20 @@ func fieldValue(key string, raw json.RawMessage, width int) string {
 		}
 		if strs != nil {
 			return truncate(strings.Join(strs, ", "), width)
+		}
+		// A list of {"id": …} objects (a File's identifiers) shows the ids.
+		var ids []string
+		for _, e := range t {
+			m, ok := e.(map[string]any)
+			id, isStr := m["id"].(string)
+			if !ok || len(m) != 1 || !isStr {
+				ids = nil
+				break
+			}
+			ids = append(ids, id)
+		}
+		if ids != nil {
+			return truncate(strings.Join(ids, ", "), width)
 		}
 	case map[string]any:
 		if len(t) == 0 {

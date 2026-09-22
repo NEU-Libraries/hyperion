@@ -86,7 +86,7 @@ func TestFileSetFromWorkCarriesItsFiles(t *testing.T) {
 	list := staticList(sess, "FileSets", "", "", nil)
 	list.state, list.items = loaded, fileSetItems(sets)
 
-	if row := list.row(list.items[0], false); !strings.Contains(row, "Position 2") || !strings.Contains(row, "Image · 2 files") {
+	if row := list.row(list.items[0], false); !strings.Contains(row, "Image FileSet  fs1 · position 2 · 2 files") {
 		t.Errorf("fileset row = %q", row)
 	}
 	_, cmd := list.Update(enter)
@@ -101,7 +101,8 @@ func TestFileSetFromWorkCarriesItsFiles(t *testing.T) {
 	files := secs[2].open(sess, atlas.Object{Type: atlas.TypeFileSet, NOID: "fs1"}).(listScreen)
 	files, _ = sendList(files, initResult[listMsg](t, files.Init()))
 	v := files.View()
-	for _, want := range []string{"page2.tif", "File · b1 · original_file · image/tiff · 4.0 KiB", "https://iiif.example/d1", "Delegate", "gated"} {
+	for _, want := range []string{"page2.tif", "File · b1 · Original file · image/tiff · 4.0 KiB",
+		"Thumbnail (IIIF image)  Delegate · d1 · https://iiif.example/d1", "gated"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("files view missing %q:\n%s", want, v)
 		}
