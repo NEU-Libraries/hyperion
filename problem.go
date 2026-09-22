@@ -115,7 +115,11 @@ func (p problem) view(width int, goBack string) string {
 // response when there is one, and any other key leaves via leave.
 func problemKey(sess *session, p problem, msg tea.KeyMsg, leave tea.Cmd) tea.Cmd {
 	if msg.String() == "d" && p.raw != nil {
-		return push(staticPager(sess, "Atlas's response", p.headline, responseRender(p.raw)))
+		pg := newPagerScreen(sess, "Atlas's response", p.headline, func(context.Context, *atlas.Client) (doc, error) {
+			return doc{render: responseRender(p.raw), raw: p.raw}, nil
+		})
+		pg.rawName = "atlas-error"
+		return push(pg)
 	}
 	return leave
 }

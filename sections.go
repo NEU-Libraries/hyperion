@@ -70,17 +70,17 @@ func objectContext(obj atlas.Object) string {
 }
 
 func recordSection(sess *session, obj atlas.Object) screen {
-	return staticPager(sess, "Record", objectContext(obj), fieldsRender(obj.Fields))
+	return staticPager(sess, "Record", objectContext(obj), fieldsRender(obj.Fields)).withRecord(obj)
 }
 
 func modsSection(sess *session, obj atlas.Object) screen {
-	return newPagerScreen(sess, "MODS", objectContext(obj), func(ctx context.Context, c *atlas.Client) (renderFunc, error) {
+	return newPagerScreen(sess, "MODS", objectContext(obj), func(ctx context.Context, c *atlas.Client) (doc, error) {
 		xml, err := c.MODS(ctx, obj.NOID)
 		if errors.Is(err, atlas.ErrNotFound) {
-			return nil, userErr("This object has no MODS.")
+			return doc{}, userErr("This object has no MODS.")
 		}
-		return xmlRender(string(xml)), err
-	})
+		return doc{render: xmlRender(string(xml)), raw: xml}, err
+	}).withRaw(atlas.PathMODS(obj.NOID), stem(obj, "mods"))
 }
 
 func modsHistorySection(sess *session, obj atlas.Object) screen {
@@ -98,28 +98,28 @@ func modsHistorySection(sess *session, obj atlas.Object) screen {
 					note:  joinNonEmpty(v.Created, byNUID(v.ActorNUID, v.OnBehalfOfNUID), v.Source, v.Note),
 					open: func(sess *session) screen {
 						return newPagerScreen(sess, "MODS as of "+versionID, objectContext(obj),
-							func(ctx context.Context, c *atlas.Client) (renderFunc, error) {
+							func(ctx context.Context, c *atlas.Client) (doc, error) {
 								xml, err := c.MODSAt(ctx, obj.NOID, versionID)
-								return xmlRender(string(xml)), err
-							})
+								return doc{render: xmlRender(string(xml)), raw: xml}, err
+							}).withRaw(atlas.PathMODSVersion(obj.NOID, versionID), stem(obj, "mods-"+versionID))
 					},
 				}
 			}
 			return items, err
-		})
+		}).withRaw(atlas.PathMODSVersions(obj.NOID), stem(obj, "mods history"))
 }
 
 func metsSection(sess *session, obj atlas.Object) screen {
-	return newPagerScreen(sess, "METS", objectContext(obj), func(ctx context.Context, c *atlas.Client) (renderFunc, error) {
+	return newPagerScreen(sess, "METS", objectContext(obj), func(ctx context.Context, c *atlas.Client) (doc, error) {
 		mets, err := c.METS(ctx, obj.Type, obj.NOID)
 		if errors.Is(err, atlas.ErrNotFound) {
-			return nil, userErr("No METS yet: Atlas builds it when the Work is completed.")
+			return doc{}, userErr("No METS yet: Atlas builds it when the Work is completed.")
 		}
 		if err != nil {
-			return nil, err
+			return doc{}, err
 		}
-		return jsonRender(indentJSON(mets)), nil
-	})
+		return doc{render: jsonRender(indentJSON(mets))}, nil
+	}).withRaw(atlas.PathMETS(obj.Type, obj.NOID), stem(obj, "mets"))
 }
 
 func fileSetsSection(sess *session, obj atlas.Object) screen {
@@ -127,7 +127,7 @@ func fileSetsSection(sess *session, obj atlas.Object) screen {
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			sets, err := c.FileSets(ctx, obj.NOID)
 			return fileSetItems(sets), err
-		})
+		}).withRaw(atlas.PathFileSets(obj.NOID), stem(obj, "filesets"))
 }
 
 // fileSetItems lists a Work's FileSets by position. Atlas has no route listing
@@ -160,7 +160,7 @@ func filesSection(sess *session, obj atlas.Object) screen {
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			assets, err := c.Assets(ctx, obj.NOID)
 			return assetItems(assets), err
-		})
+		}).withRaw(atlas.PathAssets(obj.NOID), stem(obj, "files"))
 }
 
 // assetItems lists a Work's assets: a File by filename, a Delegate by URI.
@@ -191,7 +191,7 @@ func linkedSection(sess *session, obj atlas.Object) screen {
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			noids, err := c.LinkedCollections(ctx, obj.NOID)
 			return pidItems(noids, ""), err
-		})
+		}).withRaw(atlas.PathLinkedMembers(obj.NOID), stem(obj, "linked collections"))
 }
 
 func associationsSection(sess *session, obj atlas.Object) screen {
@@ -206,7 +206,7 @@ func associationsSection(sess *session, obj atlas.Object) screen {
 				items = append(items, pidItems(as.Inbound[p], "it "+predicate(p)+" this Work")...)
 			}
 			return items, err
-		})
+		}).withRaw(atlas.PathAssociations(obj.NOID), stem(obj, "associations"))
 }
 
 func childrenSection(sess *session, obj atlas.Object) screen {
@@ -214,7 +214,7 @@ func childrenSection(sess *session, obj atlas.Object) screen {
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			noids, err := c.Children(ctx, obj.Type, obj.NOID)
 			return pidItems(noids, ""), err
-		})
+		}).withRaw(atlas.PathChildren(obj.Type, obj.NOID), stem(obj, "children"))
 }
 
 func contentsSection(sess *session, obj atlas.Object) screen {
@@ -226,7 +226,7 @@ func contentsSection(sess *session, obj atlas.Object) screen {
 				items[i] = listItem{pid: d.NOID, title: d.Title, kind: d.Klass}
 			}
 			return items, err
-		})
+		}).withRaw(atlas.PathSetContents(obj.NOID, 1), stem(obj, "contents"))
 }
 
 func fileParentsSection(sess *session, obj atlas.Object) screen {
@@ -242,7 +242,7 @@ func fileParentsSection(sess *session, obj atlas.Object) screen {
 				items = append(items, listItem{pid: a.Work, kind: "Work", lookup: true})
 			}
 			return items, err
-		})
+		}).withRaw(atlas.PathFileAncestry(obj.NOID), stem(obj, "ancestry"))
 }
 
 func fileVersionsSection(sess *session, obj atlas.Object) screen {
@@ -261,12 +261,13 @@ func fileVersionsSection(sess *session, obj atlas.Object) screen {
 					title: title,
 					note:  joinNonEmpty(v.Created, byNUID(v.ActorNUID, v.OnBehalfOfNUID), size),
 					open: func(sess *session) screen {
-						return staticPager(sess, title, objectContext(obj), fieldsRender(fields))
+						return staticPager(sess, title, objectContext(obj), fieldsRender(fields)).
+							withRaw(atlas.PathFileVersions(obj.NOID), stem(obj, "versions"))
 					},
 				}
 			}
 			return items, err
-		})
+		}).withRaw(atlas.PathFileVersions(obj.NOID), stem(obj, "versions"))
 }
 
 func ancestorsSection(sess *session, obj atlas.Object) screen {
@@ -274,7 +275,7 @@ func ancestorsSection(sess *session, obj atlas.Object) screen {
 	for i, a := range obj.Ancestors {
 		items[i] = listItem{pid: a.NOID, title: a.Title, kind: a.Klass}
 	}
-	return staticList(sess, "Ancestors", objectContext(obj)+" · root first", "", items)
+	return staticList(sess, "Ancestors", objectContext(obj)+" · root first", "", items).withRecord(obj)
 }
 
 // referenceKeys are record fields that hold other objects' PIDs.
@@ -306,17 +307,17 @@ func referencedItems(obj atlas.Object) []listItem {
 }
 
 func referencedSection(sess *session, obj atlas.Object) screen {
-	return staticList(sess, "Referenced PIDs", objectContext(obj), "", referencedItems(obj))
+	return staticList(sess, "Referenced PIDs", objectContext(obj), "", referencedItems(obj)).withRecord(obj)
 }
 
 func permissionsSection(sess *session, obj atlas.Object) screen {
-	return newPagerScreen(sess, "Permissions", objectContext(obj), func(ctx context.Context, c *atlas.Client) (renderFunc, error) {
+	return newPagerScreen(sess, "Permissions", objectContext(obj), func(ctx context.Context, c *atlas.Client) (doc, error) {
 		fields, err := c.Permissions(ctx, obj.NOID)
 		if err != nil {
-			return nil, err
+			return doc{}, err
 		}
-		return fieldsRender(fields), nil
-	})
+		return doc{render: fieldsRender(fields)}, nil
+	}).withRaw(atlas.PathPermissions(obj.NOID), stem(obj, "permissions"))
 }
 
 // pidItems makes rows for bare PIDs, looked up as they scroll into view.

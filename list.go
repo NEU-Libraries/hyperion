@@ -36,6 +36,9 @@ type listScreen struct {
 	empty string
 	load  func(context.Context, *atlas.Client) ([]listItem, error)
 
+	rawPath, rawName string // the Atlas route r shows raw ("" = none)
+	rawBody          []byte // its response, when already in hand
+
 	state     loadState
 	prob      problem
 	spinner   spinner.Model
@@ -136,6 +139,11 @@ func (s listScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "q":
 		return s, pop
+	case "r":
+		if s.rawPath != "" {
+			return s, push(newRawPager(s.sess, s.title, s.rawPath, s.rawName, s.rawBody))
+		}
+		return s, nil
 	case "up", "k":
 		s.cursor--
 	case "down", "j":
@@ -212,7 +220,11 @@ func (s listScreen) View() string {
 		return head + s.prob.view(s.sess.width, "go back")
 	}
 	if len(s.items) == 0 {
-		return head + dimStyle.Render(s.empty) + "\n\n" + dimStyle.Render("esc to go back")
+		help := "esc to go back"
+		if s.rawPath != "" {
+			help = "r raw · " + help
+		}
+		return head + dimStyle.Render(s.empty) + "\n\n" + dimStyle.Render(help)
 	}
 
 	var b strings.Builder
@@ -220,7 +232,11 @@ func (s listScreen) View() string {
 	for i := s.offset; i < end; i++ {
 		b.WriteString(s.row(s.items[i], i == s.cursor) + "\n")
 	}
-	help := fmt.Sprintf("%d/%d · ↑/↓ move · enter to open · esc to go back", s.cursor+1, len(s.items))
+	raw := ""
+	if s.rawPath != "" {
+		raw = "r raw · "
+	}
+	help := fmt.Sprintf("%d/%d · ↑/↓ move · enter to open · %sesc to go back", s.cursor+1, len(s.items), raw)
 	return head + b.String() + "\n" + dimStyle.Render(help)
 }
 

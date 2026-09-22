@@ -132,6 +132,10 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			if s.state == loaded {
 				return s, push(s.sections[s.sel].open(s.sess, s.obj))
 			}
+		case "r":
+			if s.state == loaded {
+				return s, push(newRawPager(s.sess, string(s.obj.Type)+" "+s.obj.NOID, s.obj.Path, stem(s.obj, "record"), s.obj.Raw))
+			}
 		}
 	}
 	return s, nil
@@ -171,7 +175,7 @@ func (s objectScreen) View() string {
 		room = s.sess.height - headerLines - lines - 2 - len(s.sections) - 3
 	}
 	b.WriteString(s.viewFields(room))
-	b.WriteString("\n" + dimStyle.Render("↑/↓ to move · enter to open · esc to go back"))
+	b.WriteString("\n" + dimStyle.Render("↑/↓ to move · enter to open · r raw · esc to go back"))
 	return b.String()
 }
 

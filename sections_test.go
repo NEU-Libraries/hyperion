@@ -198,8 +198,8 @@ func TestPagerErrors(t *testing.T) {
 		atlas.ErrForbidden: "This token may not read it.",
 		errors.New("boom"): "boom",
 	} {
-		s := newPagerScreen(testSession(), "MODS", "", func(context.Context, *atlas.Client) (renderFunc, error) {
-			return nil, err
+		s := newPagerScreen(testSession(), "MODS", "", func(context.Context, *atlas.Client) (doc, error) {
+			return doc{}, err
 		})
 		s, _ = sendPager(s, initResult[pagerMsg](t, s.Init()))
 		if !strings.Contains(s.View(), want) {

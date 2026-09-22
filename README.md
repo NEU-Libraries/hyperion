@@ -135,6 +135,13 @@ MODS is highlighted as XML and METS as JSON. Long lines are cut at the edge and
 `←`/`→` pans them; `w` wraps them instead, and the choice carries over to every
 pager until you quit. `↑`/`↓` scroll, and `g`/`G` jump to the top and bottom.
 
+`r` on an object or any of its sections shows exactly what Atlas returned for
+it — the request (`GET /works/w1/file_sets`) above the response, highlighted —
+the same bytes cURL would print; `r` again comes back. `s` on a raw view, MODS,
+or an Atlas error response saves it, offering `./<pid>-<section>.<ext>`. The
+file gets Atlas's bytes unchanged, and Hyperion never writes over an existing
+file.
+
 ### Export
 
 1. Resolves the container (`GET /collections/:id` or `/compilations/:id`) to

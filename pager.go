@@ -60,11 +60,20 @@ type pagerScreen struct {
 	id    int64
 	title string
 	about string
-	load  func(context.Context, *atlas.Client) (renderFunc, error)
+	load  func(context.Context, *atlas.Client) (doc, error)
+
+	// rawPath is the Atlas route r shows raw ("" = no raw view); rawName is
+	// the stem a save of it is offered under. isRaw marks the raw view itself,
+	// where r goes back.
+	rawPath, rawName string
+	rawBody          []byte // the raw response, when already in hand
+	isRaw            bool
 
 	state   loadState
 	render  renderFunc
+	raw     []byte // the bytes s saves; nil when the pager shows no document
 	prob    problem
+	save    saveState
 	spinner spinner.Model
 	vp      viewport.Model
 
@@ -73,12 +82,19 @@ type pagerScreen struct {
 }
 
 type pagerMsg struct {
-	id     int64
-	render renderFunc
-	err    error
+	id  int64
+	doc doc
+	err error
 }
 
-func newPagerScreen(sess *session, title, about string, load func(context.Context, *atlas.Client) (renderFunc, error)) pagerScreen {
+// doc is what a pager's load produces: how to lay it out, and — when it is a
+// document Atlas sent — the bytes exactly as sent, for saving.
+type doc struct {
+	render renderFunc
+	raw    []byte
+}
+
+func newPagerScreen(sess *session, title, about string, load func(context.Context, *atlas.Client) (doc, error)) pagerScreen {
 	// The viewport pans ←/→ by its horizontal step, which starts at zero —
 	// panning is off until it is set.
 	vp := viewport.New(0, 0)
@@ -94,8 +110,8 @@ const panStep = 8
 
 // staticPager is a pager whose content needs no request.
 func staticPager(sess *session, title, about string, render renderFunc) pagerScreen {
-	return newPagerScreen(sess, title, about, func(context.Context, *atlas.Client) (renderFunc, error) {
-		return render, nil
+	return newPagerScreen(sess, title, about, func(context.Context, *atlas.Client) (doc, error) {
+		return doc{render: render}, nil
 	})
 }
 
@@ -110,8 +126,8 @@ func textRender(text string) renderFunc {
 func (s pagerScreen) Init() tea.Cmd {
 	id, client, load := s.id, s.sess.client, s.load
 	return tea.Batch(s.spinner.Tick, func() tea.Msg {
-		r, err := load(context.Background(), client)
-		return pagerMsg{id: id, render: r, err: err}
+		d, err := load(context.Background(), client)
+		return pagerMsg{id: id, doc: d, err: err}
 	})
 }
 
@@ -126,7 +142,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.state = failed
 			return s, nil
 		}
-		s.render = msg.render
+		s.render, s.raw = msg.doc.render, msg.doc.raw
 		s.state = loaded
 		s.layout()
 		return s, nil
@@ -146,9 +162,28 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		if s.state == failed {
 			return s, problemKey(s.sess, s.prob, msg, pop)
 		}
+		if s.save.active {
+			var cmd tea.Cmd
+			s.save, cmd = s.save.update(msg, s.raw)
+			return s, cmd
+		}
+		s.save.notice = ""
 		switch msg.String() {
 		case "esc", "q":
 			return s, pop
+		case "r":
+			switch {
+			case s.isRaw:
+				return s, pop
+			case s.rawPath != "":
+				return s, push(newRawPager(s.sess, s.title, s.rawPath, s.rawName, s.rawBody))
+			}
+			return s, nil
+		case "s":
+			if s.state == loaded && s.raw != nil {
+				return s, s.save.start(s.rawName, s.raw)
+			}
+			return s, nil
 		case "home", "g":
 			s.vp.GotoTop()
 			return s, nil
@@ -188,6 +223,11 @@ func (s *pagerScreen) layout() {
 	} else {
 		s.starts = nil
 		s.vp.SetHorizontalStep(panStep)
+	}
+	// With no terminal height yet, fit the content: the viewport pads its view
+	// to its full height, and "unlimited" would pad a million blank lines.
+	if s.sess.height <= 0 {
+		s.vp.Height = strings.Count(text, "\n") + 1
 	}
 	s.vp.SetContent(text)
 	s.vp.SetYOffset(s.displayLine(top))
@@ -260,14 +300,32 @@ func (s pagerScreen) View() string {
 	case failed:
 		return head + s.prob.view(s.sess.width, "go back")
 	}
-	help := "↑/↓ scroll · ←/→ pan · w wrap · esc to go back"
-	if s.wrapped {
-		help = "↑/↓ scroll · w unwrap · esc to go back"
+	return head + s.vp.View() + "\n\n" + s.footer()
+}
+
+// footer is the pager's key help, or the save prompt while one is open.
+func (s pagerScreen) footer() string {
+	if s.save.active || s.save.notice != "" {
+		return s.save.view()
 	}
+	keys := []string{"↑/↓ scroll", "←/→ pan", "w wrap"}
+	if s.wrapped {
+		keys = []string{"↑/↓ scroll", "w unwrap"}
+	}
+	switch {
+	case s.isRaw:
+		keys = append(keys, "r back")
+	case s.rawPath != "":
+		keys = append(keys, "r raw")
+	}
+	if s.raw != nil {
+		keys = append(keys, "s save")
+	}
+	help := strings.Join(append(keys, "esc to go back"), " · ")
 	if !(s.vp.AtTop() && s.vp.AtBottom()) {
 		help = fmt.Sprintf("%3.0f%% · ", s.vp.ScrollPercent()*100) + help
 	}
-	return head + s.vp.View() + "\n\n" + dimStyle.Render(help)
+	return dimStyle.Render(help)
 }
 
 // fieldsRender lays out record fields as an aligned label/value table, wrapping
