@@ -179,7 +179,9 @@ inspects — Atlas serves its record with a 410.
 
 Enter on any object in a section opens that object; `esc` comes back. Lists
 that Atlas returns as bare PIDs (children, linked collections, associations)
-look up each title as its row scrolls into view. Atlas has no route that lists
+look up each title as its row scrolls into view. A long list moves a screen at
+a time with `pgdn`/`pgup` (or space and `b`), and `g`/`G` jump to its start and
+end; the key row shows where you are ("15/250"). Atlas has no route that lists
 a FileSet's files, so a FileSet opened from its Work's FileSets carries them in
 a Files section; opened by PID, it has none.
 

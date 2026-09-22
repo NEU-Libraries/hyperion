@@ -234,3 +234,35 @@ func TestSmallHelpers(t *testing.T) {
 		t.Errorf("plural = %q", got)
 	}
 }
+
+func TestListPagesTheWholeView(t *testing.T) {
+	sess := testSession()
+	sess.width, sess.height = 80, chromeLines+3 // three rows visible
+	s := staticList(sess, "Children", "", "", pidItems([]string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}, ""))
+	s, _ = sendList(s, initResult[listMsg](t, s.Init()))
+
+	for _, step := range []struct {
+		key            tea.KeyMsg
+		offset, cursor int
+	}{
+		{typed(" "), 3, 3}, // a page down shows the next three rows, not one more
+		{tea.KeyMsg{Type: tea.KeyPgDown}, 6, 6},
+		{typed("f"), 7, 9}, // the last page stops at the end
+		{tea.KeyMsg{Type: tea.KeyPgUp}, 4, 6},
+		{typed("b"), 1, 3},
+		{typed("b"), 0, 0}, // and the first at the top
+	} {
+		s, _ = sendList(s, step.key)
+		if s.offset != step.offset || s.cursor != step.cursor {
+			t.Errorf("after %q: offset=%d cursor=%d, want %d/%d", step.key.String(), s.offset, s.cursor, step.offset, step.cursor)
+		}
+	}
+	if !strings.Contains(s.View(), "pgdn/pgup to page") {
+		t.Errorf("a list longer than the view should show the page keys:\n%s", s.View())
+	}
+	short := staticList(sess, "Children", "", "", pidItems([]string{"a", "b"}, ""))
+	short, _ = sendList(short, initResult[listMsg](t, short.Init()))
+	if strings.Contains(short.View(), "pgdn") {
+		t.Error("a list that fits shouldn't offer paging")
+	}
+}

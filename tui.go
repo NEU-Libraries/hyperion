@@ -240,6 +240,7 @@ var compactKeys = strings.NewReplacer(
 	"esc to go back", "esc back", "↑/↓ to scroll", "↑/↓ scroll", "↑/↓ to move", "↑/↓ move",
 	"enter to open", "enter open", "enter to select", "enter select", "enter to continue", "enter next",
 	"enter to inspect", "enter inspect", "ctrl+c to quit", "ctrl+c quit", "q to quit", "q quit",
+	"pgdn/pgup to page", "pgdn/pgup page",
 )
 
 // quitView asks to confirm quitting, in place of the current screen; the

@@ -155,8 +155,12 @@ func (s listScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	case "down", "j":
 		s.cursor++
 	case "pgup", "b":
+		// A page moves the view a whole screen, the cursor with it — not just
+		// the cursor, which would scroll the view by a single row.
+		s.offset -= page
 		s.cursor -= page
 	case "pgdown", "f", " ":
+		s.offset += page
 		s.cursor += page
 	case "home", "g":
 		s.cursor = 0
@@ -242,7 +246,11 @@ func (s listScreen) View() string {
 	if s.rawPath != "" {
 		raw = "r raw · "
 	}
-	help := fmt.Sprintf("%d/%d · ↑/↓ to move · enter to open · %sesc to go back", s.cursor+1, len(s.items), raw)
+	paging := ""
+	if len(s.items) > bodyHeight(s.sess) {
+		paging = "pgdn/pgup to page · "
+	}
+	help := fmt.Sprintf("%d/%d · ↑/↓ to move · %senter to open · %sesc to go back", s.cursor+1, len(s.items), paging, raw)
 	return frame(title, b.String(), cols, 0, true) + "\n\n" + dimStyle.Render(help)
 }
 
