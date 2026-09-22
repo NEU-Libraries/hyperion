@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -38,7 +37,7 @@ type listScreen struct {
 	load  func(context.Context, *atlas.Client) ([]listItem, error)
 
 	state     loadState
-	err       error
+	prob      problem
 	spinner   spinner.Model
 	items     []listItem
 	cursor    int
@@ -89,7 +88,7 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return s, nil
 		}
 		if msg.err != nil {
-			s.err = errors.New(sectionMessage(msg.err))
+			s.prob = explain("Couldn't load "+s.title+".", msg.err)
 			s.state = failed
 			return s, nil
 		}
@@ -105,7 +104,7 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		it.lookup = false
 		switch {
 		case msg.err != nil:
-			it.warn = lookupProblem(msg.err)
+			it.warn = briefError(msg.err)
 		default:
 			it.title, it.kind = msg.obj.Title, string(msg.obj.Type)
 			if tombstoned(msg.obj) {
@@ -131,7 +130,7 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 
 func (s listScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	if s.state == failed {
-		return s, pop
+		return s, problemKey(s.sess, s.prob, msg, pop)
 	}
 	page := bodyHeight(s.sess)
 	switch msg.String() {
@@ -202,13 +201,15 @@ func (s listScreen) lookups() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (s listScreen) crumb() string { return s.title }
+
 func (s listScreen) View() string {
 	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.width)) + "\n\n"
 	switch s.state {
 	case loading:
 		return head + s.spinner.View() + " Loading…"
 	case failed:
-		return head + errStyle.Render("✗ ") + s.err.Error() + "\n\n" + dimStyle.Render("press any key to go back")
+		return head + s.prob.view(s.sess.width, "go back")
 	}
 	if len(s.items) == 0 {
 		return head + dimStyle.Render(s.empty) + "\n\n" + dimStyle.Render("esc to go back")
@@ -263,17 +264,6 @@ func (s listScreen) row(it listItem, selected bool) string {
 		out += dimStyle.Render("  …") // title still being looked up
 	}
 	return out
-}
-
-// lookupProblem is the short flag a row shows when its lookup failed.
-func lookupProblem(err error) string {
-	switch {
-	case errors.Is(err, atlas.ErrForbidden):
-		return "not readable"
-	case errors.Is(err, atlas.ErrNotFound):
-		return "not found"
-	}
-	return "lookup failed"
 }
 
 func tombstoned(obj atlas.Object) bool {

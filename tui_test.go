@@ -237,7 +237,7 @@ func TestResolveErrors(t *testing.T) {
 	}
 
 	empty, _ := sendExport(base, resolvedMsg{container: atlas.Container{Kind: atlas.Set}, kind: atlas.Set, pid: "x"})
-	if empty.state != exportError || !strings.Contains(empty.View(), "no readable members") {
+	if empty.state != exportError || !strings.Contains(empty.View(), "no members this token can read") {
 		t.Errorf("empty: state=%v view=%q", empty.state, empty.View())
 	}
 }
@@ -331,9 +331,9 @@ func TestInspectFlow(t *testing.T) {
 
 func TestInspectErrorMessages(t *testing.T) {
 	for err, want := range map[error]string{
-		atlas.ErrNotFound:     "no object with PID zzz",
-		atlas.ErrForbidden:    "PID zzz exists, but this token may not read it",
-		atlas.ErrUnauthorized: "access token rejected",
+		atlas.ErrNotFound:     "No object has this PID",
+		atlas.ErrForbidden:    "The object exists, but this token may not read it",
+		atlas.ErrUnauthorized: "Atlas rejected the access token",
 	} {
 		s := newObjectScreen(testSession(), "zzz")
 		next, _ := s.Update(objectMsg{id: s.id, err: err})

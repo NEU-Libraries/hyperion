@@ -44,6 +44,8 @@ func (s menuScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	return s, nil
 }
 
+func (s menuScreen) crumb() string { return "" }
+
 func (s menuScreen) View() string {
 	labels := make([]string, len(s.items))
 	for i, it := range s.items {

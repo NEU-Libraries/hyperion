@@ -53,6 +53,8 @@ func (s pidPromptScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	return s, cmd
 }
 
+func (s pidPromptScreen) crumb() string { return "Inspect" }
+
 func (s pidPromptScreen) View() string {
 	return "Inspect an object\n\n" + s.input.View() + "\n\n" + dimStyle.Render("enter to inspect · esc to go back")
 }
@@ -69,7 +71,7 @@ type objectScreen struct {
 	obj      atlas.Object
 	sections []section
 	sel      int
-	err      error
+	prob     problem
 	spinner  spinner.Model
 }
 
@@ -100,7 +102,7 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return s, nil
 		}
 		if msg.err != nil {
-			s.err = errors.New(inspectMessage(msg.err, s.pid))
+			s.prob = inspectProblem(s.pid, msg.err)
 			s.state = failed
 			return s, nil
 		}
@@ -117,7 +119,7 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		return s, cmd
 	case tea.KeyMsg:
 		if s.state == failed {
-			return s, pop
+			return s, problemKey(s.sess, s.prob, msg, pop)
 		}
 		switch msg.String() {
 		case "esc", "q":
@@ -140,7 +142,7 @@ func (s objectScreen) View() string {
 	case loading:
 		return s.spinner.View() + " Resolving PID " + s.pid + "…"
 	case failed:
-		return errStyle.Render("✗ ") + s.err.Error() + "\n\n" + dimStyle.Render("press any key to go back")
+		return s.prob.view(s.sess.width, "go back")
 	}
 
 	var b strings.Builder
@@ -162,15 +164,34 @@ func (s objectScreen) View() string {
 	}
 	b.WriteString("\n" + menuView(labels, s.sel) + "\n")
 
-	// The app header (3), the lines above, two gaps, the footer (2), and the
+	// The app header, the lines above, two gaps, the footer (2), and the
 	// trailing newline frame the menu; the record preview gets the rest.
 	room := 1 << 20
 	if s.sess.height > 0 {
-		room = s.sess.height - 3 - lines - 2 - len(s.sections) - 3
+		room = s.sess.height - headerLines - lines - 2 - len(s.sections) - 3
 	}
 	b.WriteString(s.viewFields(room))
 	b.WriteString("\n" + dimStyle.Render("↑/↓ to move · enter to open · esc to go back"))
 	return b.String()
+}
+
+// crumb names the object once it's known, else the PID being resolved.
+func (s objectScreen) crumb() string {
+	if s.state == loaded {
+		return string(s.obj.Type) + " " + s.obj.NOID
+	}
+	return "PID " + s.pid
+}
+
+// inspectProblem words a failed PID lookup for the object screen.
+func inspectProblem(pid string, err error) problem {
+	switch {
+	case errors.Is(err, atlas.ErrNotFound):
+		err = userErr("No object has this PID. Check it for typos.")
+	case errors.Is(err, atlas.ErrForbidden):
+		err = userErr("The object exists, but this token may not read it.")
+	}
+	return explain("Couldn't open PID "+pid+".", err)
 }
 
 // hiddenFields are shown above the field list (title, breadcrumb), not in it.

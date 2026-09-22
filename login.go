@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"hyperion/internal/atlas"
@@ -26,7 +25,7 @@ const (
 type loginScreen struct {
 	sess  *session
 	state loginState
-	err   error
+	prob  problem
 
 	urlInput   textinput.Model
 	tokenInput textinput.Model
@@ -95,7 +94,7 @@ func (s loginScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		return s, cmd
 	case authMsg:
 		if msg.err != nil {
-			s.err = errors.New(authMessage(msg.err))
+			s.prob = explain("Couldn't sign in to Atlas.", msg.err)
 			s.state = loginError
 			return s, nil
 		}
@@ -181,9 +180,11 @@ func (s loginScreen) View() string {
 	case loginAuth:
 		return s.spinner.View() + " Authenticating…"
 	default:
-		return errStyle.Render("✗ ") + s.err.Error() + "\n\n" + dimStyle.Render("press any key to quit")
+		return s.prob.view(s.sess.width, "quit")
 	}
 }
+
+func (s loginScreen) crumb() string { return "" }
 
 func newSpinner() spinner.Model {
 	sp := spinner.New()

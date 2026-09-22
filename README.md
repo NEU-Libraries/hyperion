@@ -62,6 +62,12 @@ main menu. **Export MODS** asks whether you want a Collection or a Set, takes th
 **PID**, shows the title and member count, and downloads with a live progress
 bar. `esc` steps back a screen; `ctrl+c` quits from anywhere.
 
+Hyperion takes over the whole terminal while it runs, and a trail under your name
+shows where you are (`Inspect › Work w1 › FileSets › FileSet fs1`). When
+something fails, the screen says what it was doing and why in plain words, with
+a line of technical detail for a bug report; if Atlas sent an error response,
+`d` shows it in full. An export's summary stays on the terminal after you quit.
+
 ```sh
 ./hyperion
 ```

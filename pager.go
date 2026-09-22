@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -30,9 +29,9 @@ const (
 	failed
 )
 
-// chromeLines is the vertical space around a section's body: the app header
-// (3), the screen's title and context lines plus a gap (3), and the footer (3).
-const chromeLines = 9
+// chromeLines is the vertical space around a section's body: the app header,
+// the screen's title and context lines plus a gap (3), and the footer (3).
+const chromeLines = headerLines + 6
 
 // bodyHeight is how many lines a scrolling body may use. With no terminal size
 // yet (tests, or before the first WindowSizeMsg) it is effectively unlimited.
@@ -43,28 +42,11 @@ func bodyHeight(sess *session) int {
 	return max(sess.height-chromeLines, 3)
 }
 
-// userErr is an error already worded for the user; sectionMessage shows it as-is.
+// userErr is an error already worded by the caller for its context; explain
+// shows it as-is.
 type userErr string
 
 func (e userErr) Error() string { return string(e) }
-
-// sectionMessage words a failed section read, unless the loader already did.
-func sectionMessage(err error) string {
-	var ue userErr
-	switch {
-	case errors.As(err, &ue):
-		return string(ue)
-	case errors.Is(err, atlas.ErrForbidden):
-		return "This token may not read this."
-	case errors.Is(err, atlas.ErrNotFound):
-		return "Atlas has nothing here for this object."
-	case errors.Is(err, atlas.ErrGone):
-		return "This object is tombstoned, so Atlas does not serve this."
-	case errors.Is(err, atlas.ErrUnauthorized):
-		return authMessage(err)
-	}
-	return err.Error()
-}
 
 // renderFunc lays out loaded content for a given terminal width (0 = unknown),
 // so a pager can re-flow it when the terminal is resized.
@@ -81,7 +63,7 @@ type pagerScreen struct {
 
 	state   loadState
 	render  renderFunc
-	err     error
+	prob    problem
 	spinner spinner.Model
 	vp      viewport.Model
 }
@@ -127,7 +109,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return s, nil
 		}
 		if msg.err != nil {
-			s.err = errors.New(sectionMessage(msg.err))
+			s.prob = explain("Couldn't load "+s.title+".", msg.err)
 			s.state = failed
 			return s, nil
 		}
@@ -149,7 +131,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		return s, cmd
 	case tea.KeyMsg:
 		if s.state == failed {
-			return s, pop
+			return s, problemKey(s.sess, s.prob, msg, pop)
 		}
 		switch msg.String() {
 		case "esc", "q":
@@ -175,13 +157,15 @@ func (s *pagerScreen) layout() {
 	s.vp.SetContent(s.render(s.sess.width))
 }
 
+func (s pagerScreen) crumb() string { return s.title }
+
 func (s pagerScreen) View() string {
 	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.width)) + "\n\n"
 	switch s.state {
 	case loading:
 		return head + s.spinner.View() + " Loading…"
 	case failed:
-		return head + errStyle.Render("✗ ") + s.err.Error() + "\n\n" + dimStyle.Render("press any key to go back")
+		return head + s.prob.view(s.sess.width, "go back")
 	}
 	help := "↑/↓ scroll · ←/→ pan · esc to go back"
 	if !(s.vp.AtTop() && s.vp.AtBottom()) {

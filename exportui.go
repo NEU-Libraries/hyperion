@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -39,7 +38,7 @@ type failure struct {
 type exportScreen struct {
 	sess  *session
 	state exportState
-	err   error
+	prob  problem
 
 	pidInput textinput.Model
 	outInput textinput.Model
@@ -109,6 +108,7 @@ func (s exportScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		return s, waitForProgress(s.sub)
 	case downloadDoneMsg:
 		s.state = exportDone
+		s.sess.farewell = s.summary()
 		return s, nil
 	}
 
@@ -190,8 +190,10 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 			return s, pop
 		}
 
-	case exportDone, exportError:
+	case exportDone:
 		return s, pop
+	case exportError:
+		return s, problemKey(s.sess, s.prob, msg, pop)
 	}
 	return s, nil
 }
@@ -211,10 +213,10 @@ func (s exportScreen) resolveCmd() tea.Cmd {
 func (s exportScreen) handleResolved(msg resolvedMsg) (screen, tea.Cmd) {
 	switch {
 	case msg.err != nil:
-		s.err = errors.New(resolveMessage(msg.err, msg.kind, msg.pid))
+		s.prob = resolveProblem(msg.err, msg.kind, msg.pid)
 		s.state = exportError
 	case len(msg.container.Members) == 0:
-		s.err = fmt.Errorf("that %s has no readable members to export", msg.kind)
+		s.prob = problem{headline: "Nothing to export.", reason: fmt.Sprintf("That %s has no members this token can read.", msg.kind)}
 		s.state = exportError
 	default:
 		s.container = msg.container
@@ -266,7 +268,7 @@ func (s exportScreen) View() string {
 	case exportDone:
 		return s.viewDone()
 	default:
-		return errStyle.Render("✗ ") + s.err.Error() + "\n\n" + dimStyle.Render("press any key to go back")
+		return s.prob.view(s.sess.width, "go back")
 	}
 }
 
@@ -288,9 +290,15 @@ func (s exportScreen) viewDownloading() string {
 }
 
 func (s exportScreen) viewDone() string {
+	return s.summary() + "\n\n" + dimStyle.Render("press any key to go back")
+}
+
+// summary tallies the finished export. It is also left on the terminal when
+// hyperion exits, since the alternate screen takes the TUI's copy with it.
+func (s exportScreen) summary() string {
 	saved := s.total - len(s.failures)
 	var b strings.Builder
-	b.WriteString(okStyle.Render(fmt.Sprintf("✓ Saved %d %s to %s", saved, records(saved), s.outDir)))
+	b.WriteString(okStyle.Render(fmt.Sprintf("✓ Saved %d %s from %q to %s", saved, records(saved), s.container.Title, s.outDir)))
 	if len(s.failures) > 0 {
 		b.WriteString("\n" + warnStyle.Render(fmt.Sprintf("⚠ %d could not be exported:", len(s.failures))))
 		for i, f := range s.failures {
@@ -298,12 +306,13 @@ func (s exportScreen) viewDone() string {
 				b.WriteString("\n" + warnStyle.Render(fmt.Sprintf("  …and %d more", len(s.failures)-10)))
 				break
 			}
-			b.WriteString("\n" + warnStyle.Render(fmt.Sprintf("  %s: %v", f.noid, f.err)))
+			b.WriteString("\n" + warnStyle.Render(fmt.Sprintf("  %s: %s", f.noid, briefError(f.err))))
 		}
 	}
-	b.WriteString("\n\n" + dimStyle.Render("press any key to go back"))
 	return b.String()
 }
+
+func (s exportScreen) crumb() string { return "Export MODS" }
 
 func (s exportScreen) kindLabel() string {
 	if s.kindIdx == 1 {

@@ -80,12 +80,12 @@ func run(args []string) int {
 func headless(client *atlas.Client, kind atlas.Kind, pid, outDir string, concurrency int) int {
 	ctx := context.Background()
 	if _, err := client.Whoami(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "hyperion:", authMessage(err))
+		fmt.Fprintln(os.Stderr, "hyperion:", explain("Couldn't sign in to Atlas.", err).text())
 		return 1
 	}
 	container, err := resolve(ctx, client, kind, pid)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "hyperion:", resolveMessage(err, kind, pid))
+		fmt.Fprintln(os.Stderr, "hyperion:", resolveProblem(err, kind, pid).text())
 		return 1
 	}
 	if len(container.Members) == 0 {
@@ -99,7 +99,7 @@ func headless(client *atlas.Client, kind atlas.Kind, pid, outDir string, concurr
 	res, _ := export.Download(ctx, client, container.Members, outDir, concurrency, nil)
 	fmt.Fprintf(os.Stderr, "Saved %d; failed %d.\n", len(res.Saved), len(res.Failed))
 	for noid, e := range res.Failed {
-		fmt.Fprintf(os.Stderr, "  %s: %v\n", noid, e)
+		fmt.Fprintf(os.Stderr, "  %s: %s\n", noid, briefError(e))
 	}
 	if len(res.Failed) > 0 {
 		return 1
@@ -129,35 +129,25 @@ func parseKind(s string) (atlas.Kind, error) {
 	}
 }
 
-// authMessage / resolveMessage / inspectMessage turn the client's sentinel
-// errors into the same user-facing wording the TUI shows.
-func authMessage(err error) string {
-	if errors.Is(err, atlas.ErrUnauthorized) || errors.Is(err, atlas.ErrForbidden) {
-		return `access token rejected (expired or revoked?). Generate a fresh one in DRS → My DRS.`
-	}
-	return "could not reach Atlas: " + err.Error()
-}
-
-func resolveMessage(err error, kind atlas.Kind, pid string) string {
+// resolveProblem words a failed Collection or Set lookup, for the export
+// screen and the headless run alike.
+func resolveProblem(err error, kind atlas.Kind, pid string) problem {
 	switch {
 	case errors.Is(err, atlas.ErrNotFound):
-		return fmt.Sprintf("no %s with PID %s — unknown, or not readable with this token.", kind, pid)
+		err = userErr(fmt.Sprintf("No %s has this PID, or this token may not read it.", kind))
 	case errors.Is(err, atlas.ErrForbidden):
-		return fmt.Sprintf("%s %s exists, but this token may not read it.", kind, pid)
+		err = userErr(fmt.Sprintf("The %s exists, but this token may not read it.", kind))
 	}
-	return err.Error()
+	return explain(fmt.Sprintf("Couldn't open the %s with PID %s.", kind, pid), err)
 }
 
-func inspectMessage(err error, pid string) string {
-	switch {
-	case errors.Is(err, atlas.ErrNotFound):
-		return fmt.Sprintf("no object with PID %s.", pid)
-	case errors.Is(err, atlas.ErrForbidden):
-		return fmt.Sprintf("PID %s exists, but this token may not read it.", pid)
-	case errors.Is(err, atlas.ErrUnauthorized):
-		return authMessage(err)
+// text renders a problem as plain lines for stderr.
+func (p problem) text() string {
+	out := p.headline + " " + p.reason
+	for _, d := range p.details {
+		out += "\n  " + d
 	}
-	return err.Error()
+	return out
 }
 
 func strVar(fs *flag.FlagSet, p *string, help string, names ...string) {
