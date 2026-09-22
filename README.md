@@ -57,10 +57,13 @@ script can't be prompted).
 ### Interactive
 
 Run with no arguments. If `ATLAS_URL` / `ATLAS_JWT` aren't set, Hyperion prompts
-for them first. It then confirms who the token authenticates as and opens the
-main menu. **Export MODS** asks whether you want a Collection or a Set, takes the
-**PID**, shows the title and member count, and downloads with a live progress
-bar. `esc` steps back a screen; `ctrl+c` quits from anywhere.
+for them first; if sign-in fails, `enter` tries again with what you typed kept.
+It then shows who you're signed in as and opens the main menu. **Export MODS**
+asks whether you want a Collection or a Set, takes the **PID** and a folder,
+says how many MODS files it will save — and how many already in the folder it
+would replace — and downloads with a live progress bar. `esc` steps back a
+screen (going back from an export error keeps what you entered); `q` on the
+main menu, or `ctrl+c` anywhere, quits.
 
 Hyperion takes over the whole terminal while it runs, and a trail under your name
 shows where you are (`Inspect › Work w1 › FileSets › FileSet fs1`). When
@@ -95,7 +98,7 @@ hand-built cURL calls with a bearer header. Auth comes from `ATLAS_URL` /
 | `permissions` | the access-control envelope |
 | `children` | PIDs directly beneath a Collection or Community |
 | `contents` | a Set's works, one page (`--page N`, default 1) |
-| `filesets`, `files` | a Work's FileSets with their files, or its files flattened |
+| `filesets`, `files` | a Work's FileSets with their files, or its downloadable files |
 | `linked`, `associations` | the Collections a Work is linked into; its associations |
 | `ancestry`, `versions` | a File's FileSet and Work; its retained versions |
 
@@ -142,10 +145,15 @@ the same flags with no subcommand — still works.
 2. A Set isn't served by `/resources/:id`, so a 404 there falls back to
    `/compilations/:id`.
 3. Shows the type, title, and ancestor chain, a menu of the sections that apply
-   to that type, and as much of the record as fits. Object ids are labelled
-   **PID** and person ids **NUID** (depositor, proxy uploader, …).
+   to that type, and a preview of the record. The menu is grouped the same way
+   for every type — Metadata, Content, Relationships, Access — and scrolls on
+   a short terminal. Object ids are labelled **PID** and person ids **NUID**
+   (depositor, proxy uploader, …); timestamps show in local time.
 
-A PID that doesn't exist and one your token may not read get different
+A section that simply has nothing — no METS yet, MODS history for someone who
+isn't a full admin — says so calmly rather than as an error.
+
+A PID that doesn't exist and one your account may not view get different
 messages, as Atlas keeps them apart (404 vs 403). A tombstoned object still
 inspects — Atlas serves its record with a 410.
 
@@ -154,12 +162,12 @@ inspects — Atlas serves its record with a 410.
 | Record | all | the typed record, every field |
 | MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (full admins only) |
 | METS | Work, FileSet | `/works/:id/mets`, `/file_sets/:id/mets` |
-| FileSets, Files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
+| FileSets, Downloadable files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
 | Linked collections, Associations | Work | `/works/:id/linked_members`, `/works/:id/associations` |
 | Children | Collection, Community | `…/children` |
 | Contents | Set | `/compilations/:id/contents` |
 | FileSet and Work, Versions | File | `/files/:id/ancestry`, `/files/:id/versions` |
-| Ancestors, Referenced PIDs | when present | from the record |
+| Ancestors; Set definition or Referenced PIDs | when present | from the record |
 | Permissions | all but Set | `/resources/:id/permissions` |
 
 Enter on any object in a section opens that object; `esc` comes back. Lists
