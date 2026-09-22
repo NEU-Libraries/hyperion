@@ -129,18 +129,33 @@ func parseKind(s string) (atlas.Kind, error) {
 	}
 }
 
-// authMessage / resolveMessage turn the client's sentinel errors into the same
-// user-facing wording the TUI shows.
+// authMessage / resolveMessage / inspectMessage turn the client's sentinel
+// errors into the same user-facing wording the TUI shows.
 func authMessage(err error) string {
-	if errors.Is(err, atlas.ErrUnauthorized) {
+	if errors.Is(err, atlas.ErrUnauthorized) || errors.Is(err, atlas.ErrForbidden) {
 		return `access token rejected (expired or revoked?). Generate a fresh one in DRS → My DRS.`
 	}
 	return "could not reach Atlas: " + err.Error()
 }
 
 func resolveMessage(err error, kind atlas.Kind, pid string) string {
-	if errors.Is(err, atlas.ErrNotFound) {
+	switch {
+	case errors.Is(err, atlas.ErrNotFound):
 		return fmt.Sprintf("no %s with PID %s — unknown, or not readable with this token.", kind, pid)
+	case errors.Is(err, atlas.ErrForbidden):
+		return fmt.Sprintf("%s %s exists, but this token may not read it.", kind, pid)
+	}
+	return err.Error()
+}
+
+func inspectMessage(err error, pid string) string {
+	switch {
+	case errors.Is(err, atlas.ErrNotFound):
+		return fmt.Sprintf("no object with PID %s.", pid)
+	case errors.Is(err, atlas.ErrForbidden):
+		return fmt.Sprintf("PID %s exists, but this token may not read it.", pid)
+	case errors.Is(err, atlas.ErrUnauthorized):
+		return authMessage(err)
 	}
 	return err.Error()
 }

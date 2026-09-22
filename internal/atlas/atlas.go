@@ -16,9 +16,12 @@ import (
 	"time"
 )
 
-// Sentinel errors so callers (and the TUI) can message auth vs missing distinctly.
+// Sentinel errors so callers (and the TUI) can message a bad token, a resource
+// the token may not read, and a missing resource distinctly — Atlas keeps 403
+// and 404 apart on the wire, and so does hyperion.
 var (
 	ErrUnauthorized = errors.New("token rejected by Atlas (expired, revoked, or malformed)")
+	ErrForbidden    = errors.New("not readable with this token")
 	ErrNotFound     = errors.New("not found")
 )
 
@@ -27,6 +30,9 @@ type Client struct {
 	baseURL string
 	token   string
 	http    *http.Client
+	// noFollow returns redirects instead of following them, so the resolver
+	// can read the typed path out of /resources/:id's Location header.
+	noFollow *http.Client
 }
 
 // New builds a client. baseURL may carry a trailing slash; it's trimmed.
@@ -35,6 +41,10 @@ func New(baseURL, token string) *Client {
 		baseURL: strings.TrimRight(baseURL, "/"),
 		token:   token,
 		http:    &http.Client{Timeout: 60 * time.Second},
+		noFollow: &http.Client{
+			Timeout:       60 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}
 }
 
@@ -163,32 +173,48 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 }
 
 func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	resp, body, err := c.send(ctx, c.http, path)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, statusError(path, resp.StatusCode, body)
+	}
+	return body, nil
+}
+
+// send issues a GET — the only verb this client has, so hyperion cannot write
+// to Atlas whatever the token allows — and reads the whole body.
+func (c *Client) send(ctx context.Context, hc *http.Client, path string) (*http.Response, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
+	if err != nil {
+		return nil, nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json, application/xml")
 
-	resp, err := c.http.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	return resp, body, nil
+}
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return body, nil
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return nil, ErrUnauthorized
+func statusError(path string, status int, body []byte) error {
+	switch status {
+	case http.StatusUnauthorized:
+		return ErrUnauthorized
+	case http.StatusForbidden:
+		return ErrForbidden
 	case http.StatusNotFound:
-		return nil, ErrNotFound
+		return ErrNotFound
 	default:
-		return nil, fmt.Errorf("atlas: GET %s → HTTP %d: %s", path, resp.StatusCode, snippet(body))
+		return fmt.Errorf("atlas: GET %s → HTTP %d: %s", path, status, snippet(body))
 	}
 }
 
