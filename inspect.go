@@ -108,6 +108,15 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.obj = msg.obj
 		s.sections = sectionsFor(msg.obj, s.extra)
+		// Say up front what the account can't open, rather than as an error
+		// after choosing it. Atlas opens MODS history to full admins only.
+		if s.sess.user.Role != "admin" {
+			for i := range s.sections {
+				if s.sections[i].label == "MODS history" {
+					s.sections[i].label = "MODS history (full admins only)"
+				}
+			}
+		}
 		s.state = loaded
 		return s, nil
 	case spinner.TickMsg:
@@ -162,19 +171,19 @@ func (s objectScreen) View() string {
 		lines++
 	}
 
-	labels := make([]string, len(s.sections))
-	for i, sec := range s.sections {
-		labels[i] = sec.label
-	}
-	b.WriteString("\n" + menuView(labels, s.sel) + "\n")
-
-	// The app header, the lines above, two gaps, the footer (2), and the
-	// trailing newline frame the menu; the record preview gets the rest.
-	room := 1 << 20
+	// The app header, the lines above, the gaps around the menu, the footer
+	// (2), and the trailing newline are fixed; the menu gets what it needs of
+	// the rest — scrolling if even that won't fit, so the header and trail are
+	// never pushed off the top — and the record preview gets what's left.
+	free := 1 << 20
 	if s.sess.height > 0 {
-		room = s.sess.height - headerLines - lines - 2 - len(s.sections) - 3
+		free = s.sess.height - headerLines - lines - 2 - 3
 	}
-	b.WriteString(s.viewFields(room))
+	menu, menuRows := s.viewMenu(max(free, 3))
+	b.WriteString("\n" + menu + "\n")
+	if room := free - menuRows - 1; room >= 2 { // - 1 for the preview's heading
+		b.WriteString(dimStyle.Render("Record preview") + "\n" + s.viewFields(room))
+	}
 	b.WriteString("\n" + dimStyle.Render("↑/↓ to move · enter to open · r raw · esc to go back"))
 	return b.String()
 }
@@ -198,20 +207,81 @@ func inspectProblem(pid string, err error) problem {
 	return explain("Couldn't open PID "+pid+".", err)
 }
 
+// viewMenu renders the section menu in at most rows lines, with each group's
+// name in a narrow left column where the group starts. If the menu is longer
+// than rows it shows a window around the selection, marking what's above and
+// below. It returns the menu and how many lines it used.
+func (s objectScreen) viewMenu(rows int) (string, int) {
+	groupWidth := 0
+	for _, sec := range s.sections {
+		groupWidth = max(groupWidth, len(sec.group))
+	}
+	from, to := 0, len(s.sections)
+	if to > rows {
+		// Leave a line for each "more" marker that will show.
+		window := rows - 2
+		from = max(min(s.sel-window/2, len(s.sections)-window), 0)
+		to = from + window
+	}
+
+	var b strings.Builder
+	lines := 0
+	mark := func(text string) {
+		b.WriteString(dimStyle.Render(strings.Repeat(" ", groupWidth+2)+text) + "\n")
+		lines++
+	}
+	if from > 0 {
+		mark("↑ more")
+	}
+	for i := from; i < to; i++ {
+		sec := s.sections[i]
+		group := ""
+		if i == 0 || sec.group != s.sections[i-1].group || i == from {
+			group = sec.group
+		}
+		row := dimStyle.Render(fmt.Sprintf("%-*s", groupWidth, group)) + "  "
+		if i == s.sel {
+			row += selStyle.Render("› " + sec.label)
+		} else {
+			row += "  " + sec.label
+		}
+		b.WriteString(row + "\n")
+		lines++
+	}
+	if to < len(s.sections) {
+		mark("↓ more")
+	}
+	return b.String(), lines
+}
+
+// technicalFields are kept for the end of the record preview: identifiers
+// and image addresses a librarian rarely needs at a glance. The full Record
+// shows every field in Atlas's order.
+var technicalFields = map[string]bool{
+	"valkyrie_id": true, "thumbnail": true, "thumbnail_2x": true, "preview": true,
+	"derivative_permissions": true, "file_identifiers": true,
+}
+
 // hiddenFields are shown above the field list (title, breadcrumb), not in it.
 var hiddenFields = map[string]bool{"title": true, "ancestors": true}
 
 // viewFields previews the record in at most room lines, pointing at the
 // Record section when it doesn't all fit.
 func (s objectScreen) viewFields(room int) string {
-	var shown []atlas.Field
+	var shown, technical []atlas.Field
 	labelWidth := 0
 	for _, f := range s.obj.Fields {
-		if !hiddenFields[f.Key] {
+		switch {
+		case hiddenFields[f.Key]:
+			continue
+		case technicalFields[f.Key]:
+			technical = append(technical, f)
+		default:
 			shown = append(shown, f)
-			labelWidth = max(labelWidth, lipgloss.Width(fieldLabel(f.Key)))
 		}
+		labelWidth = max(labelWidth, lipgloss.Width(fieldLabel(f.Key)))
 	}
+	shown = append(shown, technical...)
 	valueWidth := 0
 	if s.sess.cols() > 0 {
 		valueWidth = max(s.sess.cols()-labelWidth-2, 10)

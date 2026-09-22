@@ -9,6 +9,7 @@ import (
 
 	"hyperion/internal/atlas"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -143,5 +144,79 @@ func TestExportSummaryShowsPartialFailure(t *testing.T) {
 	v := ansi.Strip(s.View())
 	if !strings.Contains(v, `⚠ Saved 2 of 3 MODS files from "Maps"`) || !strings.Contains(v, "b: not readable") {
 		t.Errorf("partial export summary:\n%s", v)
+	}
+}
+
+// workOverview is an app showing a loaded Work with every section, at the
+// given terminal size.
+func workOverview(t *testing.T, width, height int, role string) app {
+	t.Helper()
+	a := testApp()
+	a.sess.width, a.sess.height = width, height
+	a.sess.user.Role = role
+	a = navigate(t, a, enter)
+	a, _ = sendApp(a, typed("w1"))
+	a = navigate(t, a, enter)
+	obj := a.top().(objectScreen)
+	a, _ = sendApp(a, objectMsg{id: obj.id, obj: atlas.Object{Type: atlas.TypeWork, NOID: "w1", Title: "Harbor",
+		Ancestors: []atlas.Ancestor{{NOID: "c0", Klass: "Community", Title: "Library"}},
+		Fields: []atlas.Field{
+			{Key: "id", Value: []byte(`"w1"`)},
+			{Key: "valkyrie_id", Value: []byte(`"9fb283e3"`)},
+			{Key: "thumbnail", Value: []byte(`"http://iiif/t.jpg"`)},
+			{Key: "description", Value: []byte(`"A chart."`)},
+			{Key: "depositor", Value: []byte(`"000000099"`)},
+		}}})
+	return a
+}
+
+func TestOverviewGroupsTheMenuAndLeadsThePreviewWithWhatMatters(t *testing.T) {
+	a := workOverview(t, 110, 60, "admin")
+	v := ansi.Strip(a.View())
+	for group, first := range map[string]string{"Metadata": "MODS", "Content": "FileSets",
+		"Relationships": "Linked collections", "Access": "Permissions"} {
+		found := false
+		for _, l := range strings.Split(v, "\n") {
+			if f := strings.Fields(l); len(f) > 1 && f[0] == group {
+				found = strings.Join(f[1:], " ") == first
+			}
+		}
+		if !found {
+			t.Errorf("the %s group should head %q:\n%s", group, first, v)
+		}
+	}
+	if !strings.Contains(v, "Record preview") {
+		t.Errorf("the preview should have a heading:\n%s", v)
+	}
+	if strings.Contains(v, "full admins only") {
+		t.Error("a full admin's menu shouldn't mark MODS history as limited")
+	}
+	desc, valk := strings.Index(v, "Description"), strings.Index(v, "Valkyrie ID")
+	if desc < 0 || valk < 0 || valk < desc {
+		t.Errorf("technical fields should come after the descriptive ones:\n%s", v)
+	}
+	if v := ansi.Strip(workOverview(t, 110, 60, "privileged").View()); !strings.Contains(v, "MODS history (full admins only)") {
+		t.Errorf("a delegated admin's menu should mark MODS history:\n%s", v)
+	}
+}
+
+func TestShortTerminalKeepsTheHeaderAndScrollsTheMenu(t *testing.T) {
+	a := workOverview(t, 110, 18, "admin")
+	lines := visibleLines(t, a)
+	if len(lines) > 18 {
+		t.Errorf("the overview is %d lines on an 18-line terminal", len(lines))
+	}
+	v := strings.Join(lines, "\n")
+	for _, want := range []string{"HYPERION", "Inspect › Work w1", "› Record", "↓ more"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("short overview missing %q:\n%s", want, v)
+		}
+	}
+	for range 9 { // down to Permissions, the last section
+		a, _ = sendApp(a, tea.KeyMsg{Type: tea.KeyDown})
+	}
+	v = ansi.Strip(a.View())
+	if !strings.Contains(v, "› Permissions") || !strings.Contains(v, "↑ more") || !strings.Contains(v, "HYPERION") {
+		t.Errorf("after scrolling the menu:\n%s", v)
 	}
 }

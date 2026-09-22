@@ -13,53 +13,61 @@ import (
 )
 
 // section is one entry of an object's section menu; open builds its screen.
+// group heads the menu's left column where a group starts.
 type section struct {
 	label string
+	group string
 	open  func(*session, atlas.Object) screen
 }
 
-// sectionsFor lists the sections that apply to an object's type, in menu
-// order: the full record, the type's own reads, then relationships and
-// permissions. extra carries sections the caller already has data for (a
+// sectionsFor lists the sections that apply to an object's type, grouped the
+// same way for every type — the record, then its metadata, its content, its
+// relationships, and who may see it — so a section is always found in the
+// same place. extra carries sections the caller already has data for (a
 // FileSet opened from its Work knows its files; Atlas can't list them alone).
 func sectionsFor(obj atlas.Object, extra []section) []section {
-	ss := []section{{"Record", recordSection}}
+	var meta, content, rel []section
 	switch obj.Type {
 	case atlas.TypeWork:
-		ss = append(ss,
-			section{"MODS", modsSection},
-			section{"MODS history", modsHistorySection},
-			section{"METS", metsSection},
-			section{"FileSets", fileSetsSection},
-			section{"Files", filesSection},
-			section{"Linked collections", linkedSection},
-			section{"Associations", associationsSection},
-		)
+		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS history", open: modsHistorySection},
+			{label: "METS", open: metsSection}}
+		content = []section{{label: "FileSets", open: fileSetsSection}, {label: "Downloadable files", open: filesSection}}
+		rel = []section{{label: "Linked collections", open: linkedSection}, {label: "Associations", open: associationsSection}}
 	case atlas.TypeCollection, atlas.TypeCommunity:
-		ss = append(ss,
-			section{"Children", childrenSection},
-			section{"MODS", modsSection},
-			section{"MODS history", modsHistorySection},
-		)
+		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS history", open: modsHistorySection}}
+		content = []section{{label: "Children", open: childrenSection}}
 	case atlas.TypeSet:
-		ss = append(ss, section{"Contents", contentsSection})
+		content = []section{{label: "Contents", open: contentsSection}}
 	case atlas.TypeFileSet:
-		ss = append(ss, section{"METS", metsSection})
+		meta = []section{{label: "METS", open: metsSection}}
 	case atlas.TypeFile:
-		ss = append(ss,
-			section{"FileSet and Work", fileParentsSection},
-			section{"Versions", fileVersionsSection},
-		)
+		content = []section{{label: "Versions", open: fileVersionsSection}}
+		rel = []section{{label: "FileSet and Work", open: fileParentsSection}}
 	}
-	ss = append(ss, extra...)
+	content = append(content, extra...)
 	if len(obj.Ancestors) > 0 {
-		ss = append(ss, section{"Ancestors", ancestorsSection})
+		rel = append(rel, section{label: "Ancestors", open: ancestorsSection})
 	}
 	if len(referencedItems(obj)) > 0 {
-		ss = append(ss, section{"Referenced PIDs", referencedSection})
+		label := "Referenced PIDs"
+		if obj.Type == atlas.TypeSet {
+			label = "Set definition" // its recipe; Contents is what the recipe resolves to
+		}
+		rel = append(rel, section{label: label, open: referencedSection})
+	}
+
+	ss := []section{{label: "Record", open: recordSection}}
+	for _, g := range []struct {
+		name string
+		ss   []section
+	}{{"Metadata", meta}, {"Content", content}, {"Relationships", rel}} {
+		for _, sec := range g.ss {
+			sec.group = g.name
+			ss = append(ss, sec)
+		}
 	}
 	if obj.Type != atlas.TypeSet { // a Compilation isn't a Resource; its ACL is in its record
-		ss = append(ss, section{"Permissions", permissionsSection})
+		ss = append(ss, section{label: "Permissions", group: "Access", open: permissionsSection})
 	}
 	return ss
 }
@@ -150,7 +158,7 @@ func fileSetItems(sets []atlas.FileSetEntry) []listItem {
 			it.warn = "tombstoned"
 		}
 		it.open = func(sess *session) screen {
-			return newObjectScreen(sess, fs.NOID, section{"Files", func(sess *session, fso atlas.Object) screen {
+			return newObjectScreen(sess, fs.NOID, section{label: "Files", open: func(sess *session, fso atlas.Object) screen {
 				return staticList(sess, "Files", objectContext(fso), "This FileSet has no files.", assetItems(fs.Assets))
 			}})
 		}
@@ -160,7 +168,7 @@ func fileSetItems(sets []atlas.FileSetEntry) []listItem {
 }
 
 func filesSection(sess *session, obj atlas.Object) screen {
-	return newListScreen(sess, "Files", objectContext(obj), "This Work has no files.",
+	return newListScreen(sess, "Downloadable files", objectContext(obj), "This Work has no downloadable files.",
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			assets, err := c.Assets(ctx, obj.NOID)
 			return assetItems(assets), err
@@ -311,7 +319,11 @@ func referencedItems(obj atlas.Object) []listItem {
 }
 
 func referencedSection(sess *session, obj atlas.Object) screen {
-	return staticList(sess, "Referenced PIDs", objectContext(obj), "", referencedItems(obj)).withRecord(obj)
+	title := "Referenced PIDs"
+	if obj.Type == atlas.TypeSet {
+		title = "Set definition"
+	}
+	return staticList(sess, title, objectContext(obj), "", referencedItems(obj)).withRecord(obj)
 }
 
 func permissionsSection(sess *session, obj atlas.Object) screen {
