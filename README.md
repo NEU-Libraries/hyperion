@@ -53,9 +53,10 @@ script can't be prompted).
 ### Interactive
 
 Run with no arguments. If `ATLAS_URL` / `ATLAS_JWT` aren't set, Hyperion prompts
-for them first. It then confirms who the token authenticates as, asks whether you
-want a Collection or a Set, takes the **PID**, shows the title and member count,
-and downloads with a live progress bar.
+for them first. It then confirms who the token authenticates as and opens the
+main menu. **Export MODS** asks whether you want a Collection or a Set, takes the
+**PID**, shows the title and member count, and downloads with a live progress
+bar. `esc` steps back a screen; `ctrl+c` quits from anywhere.
 
 ```sh
 ./hyperion

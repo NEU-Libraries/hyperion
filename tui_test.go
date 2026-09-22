@@ -11,138 +11,256 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// These drive the Bubble Tea model's Update directly with the messages its
-// commands would produce (KeyMsg, resolvedMsg, progressMsg, downloadDoneMsg),
-// so the state machine and views are exercised without a terminal or network.
+// These drive the screens' Update directly with the messages their commands
+// would produce (KeyMsg, authMsg, resolvedMsg, progressMsg, downloadDoneMsg),
+// so the state machines and views are exercised without a terminal or network.
+// Navigation commands (push/replace/pop) are pure, so tests may run them.
 
-// testModel starts already authenticated (at the type picker), so the export
-// flow tests don't need to run the network-backed auth command.
-func testModel() model {
-	m := newModel("http://example", "tok", 4)
-	m.client = atlas.New("http://example", "tok")
-	m.user = atlas.User{Name: "Doe, Jane", NUID: "000000002"}
-	m.state = stateType
-	return m
+var (
+	enter = tea.KeyMsg{Type: tea.KeyEnter}
+	esc   = tea.KeyMsg{Type: tea.KeyEsc}
+)
+
+func typed(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
+// testSession is already authenticated, so flow tests skip the network-backed
+// auth command.
+func testSession() *session {
+	return &session{
+		url: "http://example", token: "tok", concurrency: 4,
+		client: atlas.New("http://example", "tok"),
+		user:   atlas.User{Name: "Doe, Jane", NUID: "000000002"},
+	}
 }
 
-func send(m model, msg tea.Msg) model {
-	next, _ := m.Update(msg)
-	return next.(model)
+func testApp() app {
+	sess := testSession()
+	return app{sess: sess, stack: []screen{newMenuScreen(sess)}}
+}
+
+func sendApp(a app, msg tea.Msg) (app, tea.Cmd) {
+	next, cmd := a.Update(msg)
+	return next.(app), cmd
+}
+
+// navigate sends msg, then feeds the navigation message its command produces
+// back into the app — what the Bubble Tea runtime would do.
+func navigate(t *testing.T, a app, msg tea.Msg) app {
+	t.Helper()
+	a, cmd := sendApp(a, msg)
+	if cmd == nil {
+		t.Fatalf("%v produced no command", msg)
+	}
+	a, _ = sendApp(a, cmd())
+	return a
+}
+
+func sendExport(s exportScreen, msg tea.Msg) (exportScreen, tea.Cmd) {
+	next, cmd := s.Update(msg)
+	return next.(exportScreen), cmd
+}
+
+func isPop(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(popMsg)
+	return ok
+}
+
+func isQuit(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
 }
 
 func TestCredentialPromptFlow(t *testing.T) {
 	// No creds → prompt for URL (prefilled default), then token, then auth.
-	m := newModel("", "", 4)
-	if m.state != stateURL {
-		t.Fatalf("no creds: state = %v, want stateURL", m.state)
+	sess := &session{concurrency: 4}
+	s := newLoginScreen(sess)
+	if s.state != loginURL {
+		t.Fatalf("no creds: state = %v, want loginURL", s.state)
 	}
-	if m.urlInput.Value() != defaultURL {
-		t.Errorf("URL not prefilled: %q", m.urlInput.Value())
+	if s.urlInput.Value() != defaultURL {
+		t.Errorf("URL not prefilled: %q", s.urlInput.Value())
 	}
-	m = send(m, tea.KeyMsg{Type: tea.KeyEnter}) // accept default URL
-	if m.state != stateToken {
-		t.Fatalf("after URL: state = %v, want stateToken", m.state)
+	next, _ := s.Update(enter) // accept default URL
+	s = next.(loginScreen)
+	if s.state != loginToken {
+		t.Fatalf("after URL: state = %v, want loginToken", s.state)
 	}
-	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("jwt.abc.123")})
-	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.state != stateAuth {
-		t.Fatalf("after token: state = %v, want stateAuth", m.state)
+	next, _ = s.Update(typed("jwt.abc.123"))
+	next, _ = next.Update(enter)
+	s = next.(loginScreen)
+	if s.state != loginAuth || sess.token != "jwt.abc.123" {
+		t.Fatalf("after token: state = %v token = %q", s.state, sess.token)
 	}
 
-	// Stand in for the auth command's result.
-	ok := send(m, authMsg{user: atlas.User{Name: "Doe, Jane", NUID: "000000002"}, client: atlas.New("u", "t")})
-	if ok.state != stateType {
-		t.Fatalf("auth ok: state = %v, want stateType", ok.state)
+	// Stand in for the auth command's result: success replaces login with the menu.
+	_, cmd := s.Update(authMsg{user: atlas.User{Name: "Doe, Jane", NUID: "000000002"}, client: atlas.New("u", "t")})
+	r, ok := cmd().(replaceMsg)
+	if !ok {
+		t.Fatalf("auth ok: command gave %T, want replaceMsg", cmd())
+	}
+	if _, ok := r.s.(menuScreen); !ok {
+		t.Errorf("auth ok: replaced with %T, want menuScreen", r.s)
+	}
+	if sess.user.NUID != "000000002" || sess.client == nil {
+		t.Errorf("auth ok: session not populated: %+v", sess)
 	}
 
 	// With both creds present, the prompts are skipped entirely.
-	if s := newModel("u", "t", 4).state; s != stateAuth {
-		t.Errorf("creds present: initial state = %v, want stateAuth", s)
+	if st := newLoginScreen(&session{url: "u", token: "t"}).state; st != loginAuth {
+		t.Errorf("creds present: initial state = %v, want loginAuth", st)
 	}
 	// A rejected token surfaces as an error, not a silent pass.
-	bad := send(newModel("u", "t", 4), authMsg{err: atlas.ErrUnauthorized})
-	if bad.state != stateError {
-		t.Errorf("auth fail: state = %v, want stateError", bad.state)
+	bad, _ := newLoginScreen(&session{url: "u", token: "t"}).Update(authMsg{err: atlas.ErrUnauthorized})
+	if bad.(loginScreen).state != loginError {
+		t.Errorf("auth fail: state = %v, want loginError", bad.(loginScreen).state)
+	}
+}
+
+func TestAppNavigation(t *testing.T) {
+	a := testApp()
+	if v := a.View(); !strings.Contains(v, "HYPERION") || !strings.Contains(v, "Doe, Jane") {
+		t.Errorf("header missing name/title:\n%s", v)
+	}
+
+	a = navigate(t, a, enter) // open export from the menu
+	if _, ok := a.top().(exportScreen); !ok || len(a.stack) != 2 {
+		t.Fatalf("after enter: top = %T depth = %d, want exportScreen at depth 2", a.top(), len(a.stack))
+	}
+
+	a = navigate(t, a, esc) // back out of export
+	if _, ok := a.top().(menuScreen); !ok || len(a.stack) != 1 {
+		t.Fatalf("after esc: top = %T depth = %d, want menuScreen at depth 1", a.top(), len(a.stack))
+	}
+
+	if _, cmd := sendApp(a, esc); !isQuit(cmd) {
+		t.Error("esc on the menu should quit")
+	}
+	if _, cmd := sendApp(a, popMsg{}); !isQuit(cmd) {
+		t.Error("popping the last screen should quit")
+	}
+}
+
+func TestPushDoesNotAliasEarlierStacks(t *testing.T) {
+	a := testApp()
+	sess := a.sess
+	first, _ := sendApp(a, pushMsg{newExportScreen(sess)})
+	second, _ := sendApp(a, pushMsg{newMenuScreen(sess)})
+	if _, ok := first.top().(exportScreen); !ok {
+		t.Errorf("an earlier app value was mutated: top = %T", first.top())
+	}
+	if _, ok := second.top().(menuScreen); !ok {
+		t.Errorf("second push: top = %T", second.top())
 	}
 }
 
 func TestFlowToConfirm(t *testing.T) {
-	m := testModel()
-	if m.state != stateType {
-		t.Fatalf("initial state = %v, want stateType", m.state)
-	}
-	if v := m.View(); !strings.Contains(v, "HYPERION") || !strings.Contains(v, "Doe, Jane") {
-		t.Errorf("header missing name/title:\n%s", v)
+	s := newExportScreen(testSession())
+	if s.state != exportType {
+		t.Fatalf("initial state = %v, want exportType", s.state)
 	}
 
-	m = send(m, tea.KeyMsg{Type: tea.KeyEnter}) // choose Collection
-	if m.state != statePID {
-		t.Fatalf("after enter, state = %v, want statePID", m.state)
+	s, _ = sendExport(s, enter) // choose Collection
+	if s.state != exportPID {
+		t.Fatalf("after enter, state = %v, want exportPID", s.state)
 	}
-	if !strings.Contains(m.View(), "PID:") {
-		t.Errorf("PID prompt missing:\n%s", m.View())
+	if !strings.Contains(s.View(), "PID:") {
+		t.Errorf("PID prompt missing:\n%s", s.View())
 	}
 
-	m = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("gqnkbq9")})
-	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.state != stateOut {
-		t.Fatalf("after PID, state = %v, want stateOut", m.state)
+	s, _ = sendExport(s, typed("gqnkbq9"))
+	s, _ = sendExport(s, enter)
+	if s.state != exportOut {
+		t.Fatalf("after PID, state = %v, want exportOut", s.state)
 	}
-	if got := m.outInput.Value(); got != "./gqnkbq9-mods" {
+	if got := s.outInput.Value(); got != "./gqnkbq9-mods" {
 		t.Errorf("default out dir = %q, want ./gqnkbq9-mods", got)
 	}
 
-	m = send(m, tea.KeyMsg{Type: tea.KeyEnter})
-	if m.state != stateResolving {
-		t.Fatalf("after out, state = %v, want stateResolving", m.state)
+	s, _ = sendExport(s, enter)
+	if s.state != exportResolving {
+		t.Fatalf("after out, state = %v, want exportResolving", s.state)
 	}
 
 	// Stand in for the resolve command's result.
-	m = send(m, resolvedMsg{
+	s, _ = sendExport(s, resolvedMsg{
 		container: atlas.Container{Kind: atlas.Collection, Title: "Test Collection",
 			Members: []atlas.Member{{NOID: "a"}, {NOID: "b"}, {NOID: "c"}}},
 		kind: atlas.Collection, pid: "gqnkbq9",
 	})
-	if m.state != stateConfirm || m.total != 3 {
-		t.Fatalf("after resolved: state=%v total=%d", m.state, m.total)
+	if s.state != exportConfirm || s.total != 3 {
+		t.Fatalf("after resolved: state=%v total=%d", s.state, s.total)
 	}
-	if v := m.View(); !strings.Contains(v, "Test Collection") || !strings.Contains(v, "3 records") {
+	if v := s.View(); !strings.Contains(v, "Test Collection") || !strings.Contains(v, "3 records") {
 		t.Errorf("confirm view:\n%s", v)
+	}
+	if _, cmd := sendExport(s, typed("n")); !isPop(cmd) {
+		t.Error("declining the download should return to the menu")
+	}
+}
+
+func TestExportEscStepsBack(t *testing.T) {
+	s := newExportScreen(testSession())
+	s, _ = sendExport(s, enter)
+	s, _ = sendExport(s, typed("gqnkbq9"))
+	s, _ = sendExport(s, enter)
+
+	s, _ = sendExport(s, esc)
+	if s.state != exportPID || s.pidInput.Value() != "gqnkbq9" {
+		t.Fatalf("esc from out: state = %v pid = %q, want exportPID with PID kept", s.state, s.pidInput.Value())
+	}
+	s, _ = sendExport(s, esc)
+	if s.state != exportType {
+		t.Fatalf("esc from PID: state = %v, want exportType", s.state)
+	}
+	if _, cmd := sendExport(s, esc); !isPop(cmd) {
+		t.Error("esc from the type picker should return to the menu")
 	}
 }
 
 func TestResolveErrors(t *testing.T) {
-	base := testModel()
-	base.state = stateResolving
+	base := newExportScreen(testSession())
+	base.state = exportResolving
 
-	notFound := send(base, resolvedMsg{err: atlas.ErrNotFound, kind: atlas.Collection, pid: "zzz"})
-	if notFound.state != stateError || !strings.Contains(notFound.View(), "PID zzz") {
+	notFound, _ := sendExport(base, resolvedMsg{err: atlas.ErrNotFound, kind: atlas.Collection, pid: "zzz"})
+	if notFound.state != exportError || !strings.Contains(notFound.View(), "PID zzz") {
 		t.Errorf("not-found: state=%v view=%q", notFound.state, notFound.View())
 	}
+	if _, cmd := sendExport(notFound, enter); !isPop(cmd) {
+		t.Error("a key on the error should return to the menu")
+	}
 
-	empty := send(base, resolvedMsg{container: atlas.Container{Kind: atlas.Set}, kind: atlas.Set, pid: "x"})
-	if empty.state != stateError || !strings.Contains(empty.View(), "no readable members") {
+	empty, _ := sendExport(base, resolvedMsg{container: atlas.Container{Kind: atlas.Set}, kind: atlas.Set, pid: "x"})
+	if empty.state != exportError || !strings.Contains(empty.View(), "no readable members") {
 		t.Errorf("empty: state=%v view=%q", empty.state, empty.View())
 	}
 }
 
 func TestProgressTally(t *testing.T) {
-	m := testModel()
-	m.state = stateDownloading
-	m.total = 3
-	m.outDir = "./out"
+	s := newExportScreen(testSession())
+	s.state = exportDownloading
+	s.total = 3
+	s.outDir = "./out"
 
-	m = send(m, progressMsg(export.Progress{NOID: "a"}))
-	m = send(m, progressMsg(export.Progress{NOID: "b", Err: errors.New("boom")}))
-	if m.completed != 2 || len(m.failures) != 1 {
-		t.Fatalf("completed=%d failures=%d, want 2/1", m.completed, len(m.failures))
+	s, _ = sendExport(s, progressMsg(export.Progress{NOID: "a"}))
+	s, _ = sendExport(s, progressMsg(export.Progress{NOID: "b", Err: errors.New("boom")}))
+	if s.completed != 2 || len(s.failures) != 1 {
+		t.Fatalf("completed=%d failures=%d, want 2/1", s.completed, len(s.failures))
 	}
 
-	m = send(m, downloadDoneMsg{})
-	if m.state != stateDone {
-		t.Fatalf("after done, state=%v want stateDone", m.state)
+	s, _ = sendExport(s, downloadDoneMsg{})
+	if s.state != exportDone {
+		t.Fatalf("after done, state=%v want exportDone", s.state)
 	}
-	if v := m.View(); !strings.Contains(v, "Saved 2") || !strings.Contains(v, "1 could not") {
+	if v := s.View(); !strings.Contains(v, "Saved 2") || !strings.Contains(v, "1 could not") {
 		t.Errorf("done view:\n%s", v)
+	}
+	if _, cmd := sendExport(s, enter); !isPop(cmd) {
+		t.Error("a key on the summary should return to the menu")
 	}
 }
