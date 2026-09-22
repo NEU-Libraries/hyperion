@@ -32,8 +32,8 @@ const (
 )
 
 // chromeLines is the vertical space around a section's body: the app header,
-// the screen's title and context lines plus a gap (3), and the footer (3).
-const chromeLines = headerLines + 6
+// the frame's top and bottom edges (2), and the footer (3).
+const chromeLines = headerLines + frameRows + 3
 
 // bodyHeight is how many lines a scrolling body may use. With no terminal size
 // yet (tests, or before the first WindowSizeMsg) it is effectively unlimited.
@@ -234,7 +234,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 // source line at the top of the view stays at the top.
 func (s *pagerScreen) layout() {
 	top := s.sourceLine(s.vp.YOffset)
-	width := s.sess.cols()
+	width := max(s.sess.cols()-frameCols, 0) // inside the section's frame
 	text := s.render(width)
 
 	s.cut = false
@@ -323,14 +323,14 @@ func (s pagerScreen) crumb() string {
 }
 
 func (s pagerScreen) View() string {
-	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.cols())) + "\n\n"
+	title, cols := sectionTitle(s.title, s.about), frameWidth(s.sess)
 	switch s.state {
 	case loading:
-		return head + s.spinner.View() + " Loading…"
+		return frame(title, s.spinner.View()+" Loading…", cols, 0, true)
 	case failed:
-		return head + s.prob.view(s.sess.cols(), backKeys)
+		return frame(title, s.prob.view(cols-frameCols, backKeys), cols, 0, true)
 	}
-	return head + s.vp.View() + "\n\n" + s.footer()
+	return frame(title, s.vp.View(), cols, 0, true) + "\n\n" + s.footer()
 }
 
 // footer is the pager's key help, or the save prompt while one is open.

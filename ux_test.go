@@ -35,6 +35,8 @@ func appAt(t *testing.T, width, height int, make func(*session) screen) app {
 	return a
 }
 
+// visibleLines is the app's view as plain lines, checked to keep clear of the
+// last column, with frame borders blanked so tests read the content.
 func visibleLines(t *testing.T, a app) []string {
 	t.Helper()
 	lines := strings.Split(ansi.Strip(a.View()), "\n")
@@ -42,8 +44,15 @@ func visibleLines(t *testing.T, a app) []string {
 		if w := lipgloss.Width(l); w > a.sess.width-1 {
 			t.Errorf("line %d is %d wide on a %d-column terminal: %q", i, w, a.sess.width, l)
 		}
+		lines[i] = unframe(l)
 	}
 	return lines
+}
+
+// unframe blanks a line's frame borders — edges and corners — leaving titles
+// and content where they were.
+func unframe(l string) string {
+	return strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ").Replace(l)
 }
 
 func TestWrappedRecordValuesKeepEveryCharacter(t *testing.T) {
@@ -70,7 +79,7 @@ func TestCutValuesShowTheirEllipsis(t *testing.T) {
 	a.stack = []screen{next}
 	var found bool
 	for _, l := range visibleLines(t, a) {
-		if strings.HasPrefix(l, "Description") {
+		if strings.HasPrefix(strings.TrimSpace(l), "Description") {
 			found = strings.HasSuffix(strings.TrimRight(l, " "), "…")
 		}
 	}
@@ -174,13 +183,13 @@ func workOverview(t *testing.T, width, height int, role string) app {
 
 func TestOverviewGroupsTheMenuAndLeadsThePreviewWithWhatMatters(t *testing.T) {
 	a := workOverview(t, 110, 60, "admin")
-	v := ansi.Strip(a.View())
+	v := strings.Join(visibleLines(t, a), "\n")
 	for group, first := range map[string]string{"Metadata": "MODS", "Content": "FileSets",
 		"Relationships": "Linked collections", "Access": "Permissions"} {
 		found := false
 		for _, l := range strings.Split(v, "\n") {
 			if f := strings.Fields(l); len(f) > 1 && f[0] == group {
-				found = strings.Join(f[1:], " ") == first
+				found = strings.HasPrefix(strings.Join(f[1:], " "), first)
 			}
 		}
 		if !found {

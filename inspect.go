@@ -158,35 +158,79 @@ func (s objectScreen) View() string {
 	case failed:
 		return s.prob.view(s.sess.cols(), backKeys)
 	}
+	cols := frameWidth(s.sess)
 
-	var b strings.Builder
-	head := titleStyle.Render(string(s.obj.Type)) + dimStyle.Render("  PID ") + s.obj.NOID
+	// The object: its title and where it sits, framed under its type and PID.
+	name := titleStyle.Render(string(s.obj.Type) + " " + s.obj.NOID)
 	if tombstoned(s.obj) {
-		head += "  " + warnStyle.Render("tombstoned")
+		name += "  " + warnStyle.Render("tombstoned")
 	}
-	b.WriteString(head + "\n")
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render(truncate(s.obj.Title, s.sess.cols())) + "\n")
-	lines := 2
+	about := lipgloss.NewStyle().Bold(true).Render(s.obj.Title)
 	if crumb := breadcrumb(s.obj.Ancestors); crumb != "" {
-		b.WriteString(dimStyle.Render(truncate(crumb, s.sess.cols())) + "\n")
-		lines++
+		about += "\n" + dimStyle.Render(crumb)
 	}
+	head := frame(name, about, cols, 0, false)
 
-	// The app header, the lines above, the gaps around the menu, the footer
-	// (2), and the trailing newline are fixed; the menu gets what it needs of
-	// the rest — scrolling if even that won't fit, so the header and trail are
-	// never pushed off the top — and the record preview gets what's left.
+	// Below it, the sections and the record preview share what's left above
+	// the footer (2) and trailing newline: side by side when there's room,
+	// stacked when there isn't. Either way the header and trail stay on screen.
 	free := 1 << 20
 	if s.sess.height > 0 {
-		free = s.sess.height - headerLines - lines - 2 - 3
+		free = s.sess.height - headerLines - lipgloss.Height(head) - 3
 	}
-	menu, menuRows := s.viewMenu(max(free, 3))
-	b.WriteString("\n" + menu + "\n")
-	if room := free - menuRows - 1; room >= 2 { // - 1 for the preview's heading
-		b.WriteString(dimStyle.Render("Record preview") + "\n" + s.viewFields(room))
+	menuWidth := s.menuWidth() + frameCols
+	footer := dimStyle.Render("↑/↓ to move · enter to open · r raw · esc to go back")
+
+	if cols >= menuWidth+40 { // side by side
+		// As tall as the longer of the two — the menu or every previewable
+		// field — and no taller than the screen allows.
+		rows := max(len(s.sections), s.previewLen())
+		if s.sess.height > 0 {
+			rows = min(rows, free-frameRows)
+		}
+		menu, _ := s.viewMenu(max(rows, 3))
+		previewWidth := cols - menuWidth - 1
+		preview := s.viewFields(max(rows, 3), previewWidth-frameCols)
+		panes := sideBySide(
+			frame(titleStyle.Render("Sections"), menu, menuWidth, max(rows, 3)+frameRows, true),
+			frame(dimStyle.Render("Record preview"), preview, previewWidth, max(rows, 3)+frameRows, false))
+		return head + "\n" + panes + "\n\n" + footer
 	}
-	b.WriteString("\n" + dimStyle.Render("↑/↓ to move · enter to open · r raw · esc to go back"))
-	return b.String()
+
+	// Stacked: the menu first, as long as it needs (scrolling if it must);
+	// the preview gets the rest, if that's enough to be useful.
+	menu, menuRows := s.viewMenu(max(min(len(s.sections), free-frameRows), 3))
+	out := head + "\n" + frame(titleStyle.Render("Sections"), menu, cols, 0, true)
+	if room := free - menuRows - 2*frameRows; room >= 2 {
+		height := room + frameRows
+		if s.sess.height <= 0 {
+			height = 0 // fit the fields, rather than pad to an unknown height
+		}
+		out += "\n" + frame(dimStyle.Render("Record preview"), s.viewFields(room, cols-frameCols), cols, height, false)
+	}
+	return out + "\n\n" + footer
+}
+
+// previewLen is how many record fields the preview can show.
+func (s objectScreen) previewLen() int {
+	n := 0
+	for _, f := range s.obj.Fields {
+		if !hiddenFields[f.Key] {
+			n++
+		}
+	}
+	return n
+}
+
+// menuWidth is how wide the section menu is: the group column, the cursor,
+// and the longest section name.
+func (s objectScreen) menuWidth() int {
+	groupWidth, label := 0, 0
+	for _, sec := range s.sections {
+		groupWidth = max(groupWidth, len(sec.group))
+		label = max(label, lipgloss.Width(sec.label))
+	}
+	return groupWidth + 2 + 2 + label
 }
 
 // crumb names the object once it's known, else the PID being resolved.
@@ -268,7 +312,7 @@ var hiddenFields = map[string]bool{"title": true, "ancestors": true}
 
 // viewFields previews the record in at most room lines, pointing at the
 // Record section when it doesn't all fit.
-func (s objectScreen) viewFields(room int) string {
+func (s objectScreen) viewFields(room, width int) string {
 	var shown, technical []atlas.Field
 	labelWidth := 0
 	for _, f := range s.obj.Fields {
@@ -284,8 +328,8 @@ func (s objectScreen) viewFields(room int) string {
 	}
 	shown = append(shown, technical...)
 	valueWidth := 0
-	if s.sess.cols() > 0 {
-		valueWidth = max(s.sess.cols()-labelWidth-2, 10)
+	if width > 0 {
+		valueWidth = max(width-labelWidth-2, 10)
 	}
 
 	cut := len(shown) > room

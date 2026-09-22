@@ -218,19 +218,19 @@ func (s listScreen) lookups() tea.Cmd {
 func (s listScreen) crumb() string { return s.title }
 
 func (s listScreen) View() string {
-	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.cols())) + "\n\n"
+	title, cols := sectionTitle(s.title, s.about), frameWidth(s.sess)
 	switch s.state {
 	case loading:
-		return head + s.spinner.View() + " Loading…"
+		return frame(title, s.spinner.View()+" Loading…", cols, 0, true)
 	case failed:
-		return head + s.prob.view(s.sess.cols(), backKeys)
+		return frame(title, s.prob.view(cols-frameCols, backKeys), cols, 0, true)
 	}
 	if len(s.items) == 0 {
 		help := "esc to go back"
 		if s.rawPath != "" {
 			help = "r raw · " + help
 		}
-		return head + wrapped(dimStyle, s.empty, s.sess.cols()) + "\n\n" + dimStyle.Render(help)
+		return frame(title, wrapped(dimStyle, s.empty, cols-frameCols), cols, 0, true) + "\n\n" + dimStyle.Render(help)
 	}
 
 	var b strings.Builder
@@ -243,7 +243,7 @@ func (s listScreen) View() string {
 		raw = "r raw · "
 	}
 	help := fmt.Sprintf("%d/%d · ↑/↓ to move · enter to open · %sesc to go back", s.cursor+1, len(s.items), raw)
-	return head + b.String() + "\n" + dimStyle.Render(help)
+	return frame(title, b.String(), cols, 0, true) + "\n\n" + dimStyle.Render(help)
 }
 
 // row renders "› Title  Kind · pid · note  warn", cut to the terminal width.
@@ -261,7 +261,7 @@ func (s listScreen) row(it listItem, selected bool) string {
 		detail = append(detail, it.note)
 	}
 
-	width := s.sess.cols()
+	width := max(s.sess.cols()-frameCols, 0) // inside the list's frame
 	avail := func(used int) int {
 		if width <= 0 {
 			return 0

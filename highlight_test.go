@@ -124,7 +124,7 @@ func TestPagerPans(t *testing.T) {
 	s := staticPager(sess, "MODS", "", textRender("0123456789abcdefghijklmnopqrstuvwxyz"))
 	s, _ = sendPager(s, initResult[pagerMsg](t, s.Init()))
 	first := func() string { return strings.TrimSpace(strings.Split(ansi.Strip(s.vp.View()), "\n")[0]) }
-	if got := first(); got != "0123456789abcdefghi" {
+	if got := first(); got != "0123456789abcde" { // 20 columns, less the frame
 		t.Fatalf("before panning: %q", got)
 	}
 	s, _ = sendPager(s, tea.KeyMsg{Type: tea.KeyRight})
