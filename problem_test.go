@@ -117,7 +117,7 @@ func TestProblemDetailsKey(t *testing.T) {
 	if cmd := problemKey(sess, p, typed("x"), pop); cmd != nil {
 		t.Error("a stray letter on an error screen should do nothing")
 	}
-	for _, k := range []tea.KeyMsg{enter, esc, typed("q")} {
+	for _, k := range []tea.KeyMsg{enter, esc} {
 		if !isPop(problemKey(sess, p, k, pop)) {
 			t.Errorf("%q should go back", k.String())
 		}

@@ -163,7 +163,7 @@ func (s loginScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			return s.retry()
-		case "esc", "q":
+		case "esc":
 			return s, tea.Quit
 		}
 	}
@@ -213,6 +213,8 @@ func (s loginScreen) View() string {
 }
 
 func (s loginScreen) crumb() string { return "" }
+
+func (s loginScreen) typing() bool { return s.state == loginURL || s.state == loginToken }
 
 func newSpinner() spinner.Model {
 	sp := spinner.New()

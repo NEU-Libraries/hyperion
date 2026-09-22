@@ -62,8 +62,11 @@ It then shows who you're signed in as and opens the main menu. **Export MODS**
 asks whether you want a Collection or a Set, takes the **PID** and a folder,
 says how many MODS files it will save — and how many already in the folder it
 would replace — and downloads with a live progress bar. `esc` steps back a
-screen (going back from an export error keeps what you entered); `q` on the
-main menu, or `ctrl+c` anywhere, quits.
+screen (going back from an export error keeps what you entered). `q` quits from
+any screen, after asking — `y` to quit, `n` or `esc` to stay; if an export is
+running, the question says how far it got. Where you're typing (a PID, a
+folder, a file name, the sign-in), `q` is just a letter; `ctrl+c` quits at
+once from anywhere, and the header always shows which applies.
 
 Hyperion takes over the whole terminal while it runs, and a trail under your name
 shows where you are (`Inspect › Work w1 › FileSets › FileSet fs1`). Each screen's

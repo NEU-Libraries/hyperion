@@ -56,6 +56,8 @@ func (s pidPromptScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 
 func (s pidPromptScreen) crumb() string { return "Inspect" }
 
+func (s pidPromptScreen) typing() bool { return true }
+
 func (s pidPromptScreen) View() string {
 	return panel(s.sess, titleStyle.Render("Inspect an object"), s.input.View(), "enter to inspect · esc to go back")
 }
@@ -132,7 +134,7 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return s, problemKey(s.sess, s.prob, msg, pop)
 		}
 		switch msg.String() {
-		case "esc", "q":
+		case "esc":
 			return s, pop
 		case "up", "k":
 			s.sel = max(s.sel-1, 0)

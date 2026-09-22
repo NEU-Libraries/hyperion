@@ -142,8 +142,12 @@ func TestAppNavigation(t *testing.T) {
 	if _, cmd := sendApp(a, esc); cmd != nil {
 		t.Error("esc on the menu should do nothing; esc means back everywhere else")
 	}
-	if _, cmd := sendApp(a, typed("q")); !isQuit(cmd) {
-		t.Error("q on the menu should quit")
+	asked, cmd := sendApp(a, typed("q"))
+	if cmd != nil || !asked.quitting {
+		t.Error("q on the menu should ask before quitting")
+	}
+	if _, cmd := sendApp(asked, typed("y")); !isQuit(cmd) {
+		t.Error("y should then quit")
 	}
 	if _, cmd := sendApp(a, popMsg{}); !isQuit(cmd) {
 		t.Error("popping the last screen should quit")

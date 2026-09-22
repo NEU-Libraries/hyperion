@@ -140,11 +140,11 @@ func problemKey(sess *session, p problem, msg tea.KeyMsg, leave tea.Cmd) tea.Cmd
 	return nil
 }
 
-// isBackKey reports the keys that leave a screen showing a result: enter,
-// esc, and q.
+// isBackKey reports the keys that leave a screen showing a result: enter
+// and esc. (q quits, from the app.)
 func isBackKey(msg tea.KeyMsg) bool {
 	switch msg.String() {
-	case "enter", "esc", "q":
+	case "enter", "esc":
 		return true
 	}
 	return false

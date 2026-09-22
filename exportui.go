@@ -132,7 +132,7 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 			s.kindIdx = min(s.kindIdx+1, 1)
 		case "enter":
 			return s.toPID()
-		case "q", "esc":
+		case "esc":
 			return s, pop
 		}
 		return s, nil
@@ -352,6 +352,17 @@ func (s exportScreen) crumb() string {
 		return "Export MODS: " + s.kindName() + " " + s.pidInput.Value()
 	}
 	return "Export MODS"
+}
+
+func (s exportScreen) typing() bool { return s.state == exportPID || s.state == exportOut }
+
+// quitWarning says what quitting mid-export would leave behind.
+func (s exportScreen) quitWarning() string {
+	if s.state != exportDownloading {
+		return ""
+	}
+	return fmt.Sprintf("An export is still running. Quitting stops it: %d of %d MODS files are saved in %s so far.",
+		s.completed, s.total, s.outDir)
 }
 
 func (s exportScreen) kindName() string {

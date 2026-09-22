@@ -192,7 +192,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		s.save.notice = ""
 		switch msg.String() {
-		case "esc", "q":
+		case "esc":
 			return s, pop
 		case "r":
 			switch {
@@ -314,6 +314,8 @@ func wrapLines(text string, width int) (string, []int) {
 	}
 	return strings.Join(out, "\n"), starts
 }
+
+func (s pagerScreen) typing() bool { return s.save.active }
 
 func (s pagerScreen) crumb() string {
 	if s.isRaw {

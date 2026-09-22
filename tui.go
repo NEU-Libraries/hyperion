@@ -98,9 +98,24 @@ func replace(s screen) tea.Cmd { return func() tea.Msg { return replaceMsg{s} } 
 func pop() tea.Msg { return popMsg{} }
 
 // app is the root Bubble Tea model: a stack of screens under a common header.
+// quitting is set while it asks whether to quit.
 type app struct {
-	sess  *session
-	stack []screen
+	sess     *session
+	stack    []screen
+	quitting bool
+}
+
+// typist is a screen that may be taking text. While it is, q is a letter,
+// not a request to quit; ctrl+c still quits.
+type typist interface{ typing() bool }
+
+// quitWarner is a screen with work under way that quitting would cut short;
+// its warning is added to the quit confirmation.
+type quitWarner interface{ quitWarning() string }
+
+func typing(s screen) bool {
+	t, ok := s.(typist)
+	return ok && t.typing()
 }
 
 func newApp(url, token string, concurrency int) app {
@@ -121,6 +136,22 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.Type == tea.KeyCtrlC {
 			return a, tea.Quit
+		}
+		// q quits from any screen that isn't taking text, once confirmed.
+		// Meanwhile the screen below keeps receiving everything but keys, so
+		// an export in progress carries on.
+		if a.quitting {
+			switch msg.String() {
+			case "y", "Y":
+				return a, tea.Quit
+			case "n", "N", "esc", "q":
+				a.quitting = false
+			}
+			return a, nil
+		}
+		if msg.String() == "q" && !typing(a.top()) {
+			a.quitting = true
+			return a, nil
 		}
 	case tea.WindowSizeMsg:
 		a.sess.width, a.sess.height = msg.Width, msg.Height
@@ -156,12 +187,20 @@ const headerLines = 5
 
 func (a app) View() string {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
+	quitKey := "q to quit"
+	if typing(a.top()) {
+		quitKey = "ctrl+c to quit"
+	}
+	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS · "+quitKey) + "\n")
 	if a.sess.user.NUID != "" {
 		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("Signed in as %s (NUID %s)\n", a.sess.user.Name, a.sess.user.NUID))
 		b.WriteString("\n" + a.trail() + "\n")
 	}
-	b.WriteString("\n" + a.top().View() + "\n")
+	if a.quitting {
+		b.WriteString("\n" + a.quitView() + "\n")
+	} else {
+		b.WriteString("\n" + a.top().View() + "\n")
+	}
 
 	// Keep every line clear of the last column. A line that exactly fills the
 	// terminal wraps if the terminal draws any glyph wider than Bubble Tea
@@ -171,6 +210,16 @@ func (a app) View() string {
 		return lipgloss.NewStyle().MaxWidth(a.sess.width - 1).Render(b.String())
 	}
 	return b.String()
+}
+
+// quitView asks to confirm quitting, in place of the current screen; the
+// trail above still shows where you'd leave from.
+func (a app) quitView() string {
+	body := "Hyperion only reads from Atlas, so quitting loses nothing but your place."
+	if w, ok := a.top().(quitWarner); ok && w.quitWarning() != "" {
+		body = wrapped(warnStyle, "⚠ "+w.quitWarning(), frameWidth(a.sess)-frameCols)
+	}
+	return panel(a.sess, titleStyle.Render("Quit Hyperion?"), body, "y to quit · n or esc to stay")
 }
 
 // trail is the path of screens to the current one — "Inspect › Work w1 ›

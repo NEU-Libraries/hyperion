@@ -143,7 +143,7 @@ func (s listScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	}
 	page := bodyHeight(s.sess)
 	switch msg.String() {
-	case "esc", "q":
+	case "esc":
 		return s, pop
 	case "r":
 		if s.rawPath != "" {
