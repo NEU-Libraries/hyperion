@@ -88,9 +88,11 @@ func staticPager(sess *session, title, about string, render renderFunc) pagerScr
 	})
 }
 
-// textRender shows text as-is, trailing whitespace trimmed.
+// textRender shows text as-is, trailing whitespace trimmed and tabs expanded.
+// The viewport measures a tab as no width when it cuts a long line to fit, and
+// lipgloss then draws it four wide — so a tabbed line would overflow and wrap.
 func textRender(text string) renderFunc {
-	text = strings.TrimRight(text, " \n\t\r")
+	text = strings.ReplaceAll(strings.TrimRight(text, " \n\t\r"), "\t", "    ")
 	return func(int) string { return text }
 }
 
@@ -152,7 +154,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 
 // layout sizes the viewport to the terminal and re-renders into it.
 func (s *pagerScreen) layout() {
-	s.vp.Width = s.sess.width
+	s.vp.Width = max(s.sess.width-1, 0) // the app keeps clear of the last column
 	s.vp.Height = bodyHeight(s.sess)
 	s.vp.SetContent(s.render(s.sess.width))
 }

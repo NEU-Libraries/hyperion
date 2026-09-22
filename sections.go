@@ -79,7 +79,7 @@ func modsSection(sess *session, obj atlas.Object) screen {
 		if errors.Is(err, atlas.ErrNotFound) {
 			return nil, userErr("This object has no MODS.")
 		}
-		return textRender(string(xml)), err
+		return xmlRender(string(xml)), err
 	})
 }
 
@@ -100,7 +100,7 @@ func modsHistorySection(sess *session, obj atlas.Object) screen {
 						return newPagerScreen(sess, "MODS as of "+versionID, objectContext(obj),
 							func(ctx context.Context, c *atlas.Client) (renderFunc, error) {
 								xml, err := c.MODSAt(ctx, obj.NOID, versionID)
-								return textRender(string(xml)), err
+								return xmlRender(string(xml)), err
 							})
 					},
 				}
@@ -118,7 +118,7 @@ func metsSection(sess *session, obj atlas.Object) screen {
 		if err != nil {
 			return nil, err
 		}
-		return textRender(indentJSON(mets)), nil
+		return jsonRender(indentJSON(mets)), nil
 	})
 }
 

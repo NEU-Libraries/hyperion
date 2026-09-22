@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -114,7 +115,7 @@ func (p problem) view(width int, goBack string) string {
 // response when there is one, and any other key leaves via leave.
 func problemKey(sess *session, p problem, msg tea.KeyMsg, leave tea.Cmd) tea.Cmd {
 	if msg.String() == "d" && p.raw != nil {
-		return push(staticPager(sess, "Atlas's response", p.headline, textRender(indentJSON(p.raw))))
+		return push(staticPager(sess, "Atlas's response", p.headline, responseRender(p.raw)))
 	}
 	return leave
 }
@@ -135,4 +136,17 @@ func briefError(err error) string {
 		return fmt.Sprintf("Atlas error (HTTP %d)", he.Status)
 	}
 	return "failed"
+}
+
+// responseRender shows an error body highlighted as whatever it is: JSON from
+// the API, XML, or (say, a proxy's HTML page) plain text.
+func responseRender(body []byte) renderFunc {
+	trimmed := strings.TrimSpace(string(body))
+	switch {
+	case json.Valid(body):
+		return jsonRender(indentJSON(body))
+	case strings.HasPrefix(trimmed, "<?xml"):
+		return xmlRender(trimmed)
+	}
+	return textRender(trimmed)
 }
