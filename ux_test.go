@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -258,5 +259,27 @@ func TestPermissionsDropTheRepeatedType(t *testing.T) {
 	p := loadedPager(t, permissionsSection(sess, atlas.Object{Type: atlas.TypeWork, NOID: "w1"}).(pagerScreen))
 	if v := ansi.Strip(p.View()); strings.Contains(v, "Classification") || strings.Contains(v, "Type") || !strings.Contains(v, "public") {
 		t.Errorf("permissions:\n%s", v)
+	}
+}
+
+func TestMissingDocumentsAreNoticesNotFailures(t *testing.T) {
+	sess, _ := sessionAgainst(t, map[string]string{}) // every route 404s
+	p := loadedPager(t, metsSection(sess, atlas.Object{Type: atlas.TypeFileSet, NOID: "fs1"}).(pagerScreen))
+	v := ansi.Strip(p.View())
+	if p.state != loaded || strings.Contains(v, "✗") || !strings.Contains(v, "This FileSet has no METS.") {
+		t.Errorf("missing METS should read as a calm notice:\n%s", v)
+	}
+
+	s := newListScreen(sess, "MODS history", "", "No retained MODS versions.",
+		func(context.Context, *atlas.Client) ([]listItem, error) { return nil, notice(modsHistoryLimit) })
+	s, _ = sendList(s, initResult[listMsg](t, s.Init()))
+	if v := ansi.Strip(s.View()); strings.Contains(v, "✗") || !strings.Contains(v, "only available to full admins") {
+		t.Errorf("the MODS history limit should read as a notice:\n%s", v)
+	}
+}
+
+func TestHeaderLabelsTheNUID(t *testing.T) {
+	if v := testApp().View(); !strings.Contains(v, "Signed in as Doe, Jane (NUID 000000002)") {
+		t.Errorf("header:\n%s", v)
 	}
 }

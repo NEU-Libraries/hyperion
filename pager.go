@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -48,6 +49,13 @@ func bodyHeight(sess *session) int {
 type userErr string
 
 func (e userErr) Error() string { return string(e) }
+
+// notice is a load that found nothing to show, for an ordinary reason — an
+// object with no METS, a section the account can't open — rather than a
+// failure. Pagers and lists show it calmly, like an empty list, not as ✗.
+type notice string
+
+func (n notice) Error() string { return string(n) }
 
 // renderFunc lays out loaded content for a given terminal width (0 = unknown),
 // so a pager can re-flow it when the terminal is resized.
@@ -136,6 +144,10 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	case pagerMsg:
 		if msg.id != s.id {
 			return s, nil
+		}
+		var n notice
+		if errors.As(msg.err, &n) {
+			msg.doc, msg.err = doc{render: textRender(dimStyle.Render(string(n)))}, nil
 		}
 		if msg.err != nil {
 			s.prob = explain("Couldn't load "+s.title+".", msg.err)

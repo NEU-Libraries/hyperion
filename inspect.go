@@ -203,7 +203,7 @@ func inspectProblem(pid string, err error) problem {
 	case errors.Is(err, atlas.ErrNotFound):
 		err = userErr("No object has this PID. Check it for typos.")
 	case errors.Is(err, atlas.ErrForbidden):
-		err = userErr("The object exists, but this token may not read it.")
+		err = userErr("The object exists, but your account doesn't have permission to view it.")
 	}
 	return explain("Couldn't open PID "+pid+".", err)
 }

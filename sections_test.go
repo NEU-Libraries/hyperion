@@ -196,7 +196,7 @@ func TestPagerScrolls(t *testing.T) {
 func TestPagerErrors(t *testing.T) {
 	for err, want := range map[error]string{
 		userErr("MODS history is admin only: it names who made each edit."): "admin only",
-		atlas.ErrForbidden: "This token may not read it.",
+		atlas.ErrForbidden: "Your account doesn't have permission to view it.",
 		errors.New("boom"): "boom",
 	} {
 		s := newPagerScreen(testSession(), "MODS", "", func(context.Context, *atlas.Client) (doc, error) {

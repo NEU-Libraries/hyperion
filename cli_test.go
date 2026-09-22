@@ -108,9 +108,10 @@ func TestGetFailures(t *testing.T) {
 	}{
 		{[]string{"get", "nope"}, exitNotFound, "No object has this PID"},
 		{[]string{"get", "nope", "mods"}, exitNotFound, "No object has this PID"},
-		{[]string{"get", "w1", "ancestry"}, exitFailed, "PID w1 is a Work; Atlas has no ancestry for it."},
+		{[]string{"get", "w1", "mets"}, exitFailed, "PID w1: this Work has no METS."},
+		{[]string{"get", "k1", "mets"}, exitUsage, "PID k1 is a Collection; mets is only for a Work or FileSet."},
 		{[]string{"get", "b1"}, exitFailed, "NoMethodError: undefined method 'blob_url'"},
-		{[]string{"get", "w1", "children"}, exitUsage, "a Work has no children"},
+		{[]string{"get", "w1", "children"}, exitUsage, "PID w1 is a Work; children is only for a Collection or Community."},
 		{[]string{"get", "w1", "thumbnails"}, exitUsage, `no section "thumbnails"`},
 		{[]string{"get", "w1", "files", "--at", "v2"}, exitUsage, "--at goes with the mods section"},
 		{[]string{"get", "s1", "contents", "--page", "0"}, exitUsage, "--page counts from 1"},

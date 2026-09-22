@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -89,6 +90,10 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	case listMsg:
 		if msg.id != s.id {
 			return s, nil
+		}
+		var n notice
+		if errors.As(msg.err, &n) {
+			s.empty, msg.items, msg.err = string(n), nil, nil
 		}
 		if msg.err != nil {
 			s.prob = explain("Couldn't load "+s.title+".", msg.err)

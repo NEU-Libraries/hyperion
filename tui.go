@@ -158,7 +158,7 @@ func (a app) View() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
 	if a.sess.user.NUID != "" {
-		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("%s (%s)\n", a.sess.user.Name, a.sess.user.NUID))
+		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("Signed in as %s (NUID %s)\n", a.sess.user.Name, a.sess.user.NUID))
 		b.WriteString(a.trail() + "\n")
 	}
 	b.WriteString("\n" + a.top().View() + "\n")

@@ -346,7 +346,7 @@ func TestInspectFlow(t *testing.T) {
 func TestInspectErrorMessages(t *testing.T) {
 	for err, want := range map[error]string{
 		atlas.ErrNotFound:     "No object has this PID",
-		atlas.ErrForbidden:    "The object exists, but this token may not read it",
+		atlas.ErrForbidden:    "The object exists, but your account doesn't have permission to view it",
 		atlas.ErrUnauthorized: "Atlas rejected the access token",
 	} {
 		s := newObjectScreen(testSession(), "zzz")

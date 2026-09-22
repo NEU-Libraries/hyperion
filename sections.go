@@ -72,6 +72,9 @@ func sectionsFor(obj atlas.Object, extra []section) []section {
 	return ss
 }
 
+// modsHistoryLimit is why MODS history won't open for anyone but a full admin.
+const modsHistoryLimit = "MODS history is only available to full admins, because it shows who made each edit."
+
 // objectContext is the dimmed line under a section's title naming its object.
 func objectContext(obj atlas.Object) string {
 	return fmt.Sprintf("%s %s · %s", obj.Type, obj.NOID, obj.Title)
@@ -85,7 +88,7 @@ func modsSection(sess *session, obj atlas.Object) screen {
 	return newPagerScreen(sess, "MODS", objectContext(obj), func(ctx context.Context, c *atlas.Client) (doc, error) {
 		xml, err := c.MODS(ctx, obj.NOID)
 		if errors.Is(err, atlas.ErrNotFound) {
-			return doc{}, userErr("This object has no MODS.")
+			return doc{}, notice("This " + string(obj.Type) + " has no MODS.")
 		}
 		return doc{render: xmlRender(string(xml)), raw: xml}, err
 	}).withRaw(atlas.PathMODS(obj.NOID), stem(obj, "mods"))
@@ -96,8 +99,7 @@ func modsHistorySection(sess *session, obj atlas.Object) screen {
 		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
 			versions, err := c.MODSVersions(ctx, obj.NOID)
 			if errors.Is(err, atlas.ErrForbidden) {
-				return nil, userErr("MODS history needs a full admin token; delegated admins can't read it. " +
-					"Atlas gates it on the audit log, because it names who made each edit.")
+				return nil, notice(modsHistoryLimit)
 			}
 			items := make([]listItem, len(versions))
 			for i, v := range versions {
@@ -123,9 +125,9 @@ func metsSection(sess *session, obj atlas.Object) screen {
 		mets, err := c.METS(ctx, obj.Type, obj.NOID)
 		if errors.Is(err, atlas.ErrNotFound) {
 			if obj.Type == atlas.TypeWork {
-				return doc{}, userErr("No METS yet: Atlas builds it when the Work is completed.")
+				return doc{}, notice("No METS yet: Atlas builds it when the Work is completed.")
 			}
-			return doc{}, userErr("This FileSet has no METS.")
+			return doc{}, notice("This FileSet has no METS.")
 		}
 		if err != nil {
 			return doc{}, err

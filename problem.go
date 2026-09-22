@@ -41,7 +41,7 @@ func explain(headline string, err error) problem {
 		p.reason = "Atlas rejected the access token: it may have expired or been revoked. " +
 			`Generate a new one in DRS → My DRS → "Programmatic access".`
 	case errors.Is(err, atlas.ErrForbidden):
-		p.reason = "This token may not read it."
+		p.reason = "Your account doesn't have permission to view it."
 	case errors.Is(err, atlas.ErrNotFound):
 		p.reason = "Atlas has no record of it."
 	case errors.Is(err, atlas.ErrGone):
