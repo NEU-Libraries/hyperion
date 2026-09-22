@@ -38,6 +38,7 @@ type listScreen struct {
 	load  func(context.Context, *atlas.Client) ([]listItem, error)
 
 	rawPath, rawName string // the Atlas route r shows raw ("" = none)
+	rawTitle         string // what the raw response is ("" = the list's title)
 	rawBody          []byte // its response, when already in hand
 
 	state     loadState
@@ -146,7 +147,7 @@ func (s listScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		return s, pop
 	case "r":
 		if s.rawPath != "" {
-			return s, push(newRawPager(s.sess, s.title, s.rawPath, s.rawName, s.rawBody))
+			return s, push(newRawPager(s.sess, firstNonEmpty(s.rawTitle, s.title), s.rawPath, s.rawName, s.rawBody))
 		}
 		return s, nil
 	case "up", "k":
@@ -241,7 +242,7 @@ func (s listScreen) View() string {
 	if s.rawPath != "" {
 		raw = "r raw · "
 	}
-	help := fmt.Sprintf("%d/%d · ↑/↓ move · enter to open · %sesc to go back", s.cursor+1, len(s.items), raw)
+	help := fmt.Sprintf("%d/%d · ↑/↓ to move · enter to open · %sesc to go back", s.cursor+1, len(s.items), raw)
 	return head + b.String() + "\n" + dimStyle.Render(help)
 }
 

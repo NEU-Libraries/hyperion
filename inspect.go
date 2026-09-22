@@ -144,7 +144,7 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			}
 		case "r":
 			if s.state == loaded {
-				return s, push(newRawPager(s.sess, string(s.obj.Type)+" "+s.obj.NOID, s.obj.Path, stem(s.obj, "record"), s.obj.Raw))
+				return s, push(newRawPager(s.sess, "Record", s.obj.Path, stem(s.obj, "record"), s.obj.Raw))
 			}
 		}
 	}

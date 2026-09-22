@@ -32,13 +32,20 @@ func (s listScreen) withRaw(path, stem string) listScreen {
 // views built from it (the record, its ancestors, the PIDs it references).
 func (s pagerScreen) withRecord(obj atlas.Object) pagerScreen {
 	s = s.withRaw(obj.Path, stem(obj, "record"))
-	s.rawBody = obj.Raw
+	s.rawBody, s.rawTitle = obj.Raw, "Record"
 	return s
 }
 
 func (s listScreen) withRecord(obj atlas.Object) listScreen {
 	s = s.withRaw(obj.Path, stem(obj, "record"))
-	s.rawBody = obj.Raw
+	s.rawBody, s.rawTitle = obj.Raw, "Record"
+	return s
+}
+
+// rawTitled names what r shows when it isn't what the screen shows — one
+// revision's pager, whose raw response is every version.
+func (s pagerScreen) rawTitled(title string) pagerScreen {
+	s.rawTitle = title
 	return s
 }
 
@@ -87,7 +94,7 @@ func (v *saveState) start(stem string, raw []byte) tea.Cmd {
 func (v saveState) update(msg tea.KeyMsg, raw []byte) (saveState, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
-		v.active = false
+		v.active, v.notice = false, ""
 		return v, nil
 	case tea.KeyEnter:
 		name := strings.TrimSpace(v.input.Value())
@@ -122,10 +129,12 @@ func (v saveState) view() string {
 	if !v.active {
 		return notice
 	}
+	// One line either way, so the footer never grows and pushes the screen up:
+	// the problem with the name, while there is one, in place of the key help.
 	if notice != "" {
-		notice += "\n"
+		return v.input.View() + "  " + notice
 	}
-	return notice + v.input.View() + dimStyle.Render("  enter to save · esc to cancel")
+	return v.input.View() + dimStyle.Render("  enter to save · esc to cancel")
 }
 
 // saveNew writes raw to name exactly as Atlas sent it, and never over an

@@ -74,6 +74,7 @@ type pagerScreen struct {
 	// the stem a save of it is offered under. isRaw marks the raw view itself,
 	// where r goes back.
 	rawPath, rawName string
+	rawTitle         string // what the raw response is ("" = the pager's title)
 	rawBody          []byte // the raw response, when already in hand
 	isRaw            bool
 
@@ -86,6 +87,7 @@ type pagerScreen struct {
 	vp      viewport.Model
 
 	wrapped bool  // whether the content was last laid out wrapped
+	cut     bool  // whether, unwrapped, some line is wider than the view
 	starts  []int // while wrapped: first view line of each document line
 }
 
@@ -188,7 +190,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			case s.isRaw:
 				return s, pop
 			case s.rawPath != "":
-				return s, push(newRawPager(s.sess, s.title, s.rawPath, s.rawName, s.rawBody))
+				return s, push(newRawPager(s.sess, firstNonEmpty(s.rawTitle, s.title), s.rawPath, s.rawName, s.rawBody))
 			}
 			return s, nil
 		case "s":
@@ -226,8 +228,15 @@ func (s *pagerScreen) layout() {
 	width := s.sess.cols()
 	text := s.render(width)
 
-	s.vp.Width, s.vp.Height = width, bodyHeight(s.sess)
-	s.wrapped = s.sess.wrap && width > 0
+	s.cut = false
+	for _, l := range strings.Split(text, "\n") {
+		if width > 0 && ansi.StringWidth(l) > width {
+			s.cut = true
+			break
+		}
+	}
+	s.vp.Width = width
+	s.wrapped = s.sess.wrap && s.cut
 	if s.wrapped {
 		text, s.starts = wrapLines(text, width)
 		s.vp.SetXOffset(0)
@@ -236,11 +245,10 @@ func (s *pagerScreen) layout() {
 		s.starts = nil
 		s.vp.SetHorizontalStep(panStep)
 	}
-	// With no terminal height yet, fit the content: the viewport pads its view
-	// to its full height, and "unlimited" would pad a million blank lines.
-	if s.sess.height <= 0 {
-		s.vp.Height = strings.Count(text, "\n") + 1
-	}
+	// No taller than the content, so the footer sits right under it as on a
+	// list — and, with no terminal height yet, so the viewport doesn't pad to
+	// the "unlimited" height with a million blank lines.
+	s.vp.Height = min(bodyHeight(s.sess), strings.Count(text, "\n")+1)
 	s.vp.SetContent(text)
 	s.vp.SetYOffset(s.displayLine(top))
 }
@@ -287,22 +295,23 @@ func wrapLines(text string, width int) (string, []int) {
 		if width-hang < 20 { // too deep to indent usefully
 			indent, hang = 0, 0
 		}
-		first := ansi.Wrap(ansi.TruncateLeft(line, indent, ""), width-indent, "")
-		for j, part := range strings.Split(first, "\n") {
-			if j == 0 {
-				out = append(out, strings.Repeat(" ", indent)+part)
-				continue
-			}
-			// Continuation lines get the narrower hanging width.
-			for _, p := range strings.Split(ansi.Wrap(part, width-hang, ""), "\n") {
-				out = append(out, strings.Repeat(" ", hang)+p)
-			}
+		// Wrap the whole line once at the hanging width, so no word is left
+		// alone on a line; the first part just keeps the line's own indent.
+		parts := strings.Split(ansi.Wrap(ansi.TruncateLeft(line, indent, ""), width-hang, ""), "\n")
+		out = append(out, strings.Repeat(" ", indent)+parts[0])
+		for _, p := range parts[1:] {
+			out = append(out, strings.Repeat(" ", hang)+p)
 		}
 	}
 	return strings.Join(out, "\n"), starts
 }
 
-func (s pagerScreen) crumb() string { return s.title }
+func (s pagerScreen) crumb() string {
+	if s.isRaw {
+		return "raw" // the step before already names what this is
+	}
+	return s.title
+}
 
 func (s pagerScreen) View() string {
 	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.cols())) + "\n\n"
@@ -320,9 +329,13 @@ func (s pagerScreen) footer() string {
 	if s.save.active || s.save.notice != "" {
 		return s.save.view()
 	}
-	keys := []string{"↑/↓ scroll", "←/→ pan", "w wrap"}
-	if s.wrapped {
-		keys = []string{"↑/↓ scroll", "w unwrap"}
+	// Pan and wrap only matter when a line is too wide for the view.
+	keys := []string{"↑/↓ to scroll"}
+	switch {
+	case s.wrapped:
+		keys = append(keys, "w unwrap")
+	case s.cut:
+		keys = append(keys, "←/→ pan", "w wrap")
 	}
 	switch {
 	case s.isRaw:
@@ -335,7 +348,7 @@ func (s pagerScreen) footer() string {
 	}
 	help := strings.Join(append(keys, "esc to go back"), " · ")
 	if !(s.vp.AtTop() && s.vp.AtBottom()) {
-		help = fmt.Sprintf("%3.0f%% · ", s.vp.ScrollPercent()*100) + help
+		help = fmt.Sprintf("%.0f%% · ", s.vp.ScrollPercent()*100) + help
 	}
 	return dimStyle.Render(help)
 }

@@ -283,3 +283,61 @@ func TestHeaderLabelsTheNUID(t *testing.T) {
 		t.Errorf("header:\n%s", v)
 	}
 }
+
+func TestPagerOffersPanAndWrapOnlyWhenALineIsCut(t *testing.T) {
+	short := appAt(t, 80, 40, func(sess *session) screen { return staticPager(sess, "Permissions", "", textRender("Read  public")) })
+	if v := ansi.Strip(short.View()); strings.Contains(v, "pan") || strings.Contains(v, "wrap") {
+		t.Errorf("nothing is cut, so pan and wrap shouldn't be offered:\n%s", v)
+	}
+	long := appAt(t, 80, 40, func(sess *session) screen {
+		return staticPager(sess, "MODS", "", textRender(strings.Repeat("x", 120)))
+	})
+	if v := ansi.Strip(long.View()); !strings.Contains(v, "←/→ pan · w wrap") {
+		t.Errorf("a cut line should offer pan and wrap:\n%s", v)
+	}
+	// The footer follows the content, as on a list, rather than the screen's foot.
+	lines := visibleLines(t, short)
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) > 12 {
+		t.Errorf("a one-line document's footer sits %d lines down:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
+}
+
+func TestWrapLeavesNoOrphanWords(t *testing.T) {
+	line := "    <mods:abstract>" + strings.Repeat("alpha beta gamma ", 6) + "the end</mods:abstract>"
+	out, _ := wrapLines(line, 40)
+	parts := strings.Split(out, "\n")
+	for i, p := range parts[:len(parts)-1] {
+		if len(strings.Fields(p)) < 2 {
+			t.Errorf("line %d holds a single word: %q\n%s", i, p, out)
+		}
+	}
+}
+
+func TestRawViewsSayWhatTheyShow(t *testing.T) {
+	sess := testSession()
+	fields := []atlas.Field{{Key: "revision", Value: []byte("1")}}
+	rev := staticPager(sess, "Revision 1", "", fieldsRender(fields)).
+		withRaw(atlas.PathFileVersions("b1"), "b1-versions").rawTitled("Versions")
+	rev, _ = sendPager(rev, initResult[pagerMsg](t, rev.Init()))
+	_, cmd := sendPager(rev, typed("r"))
+	raw := cmd().(pushMsg).s.(pagerScreen)
+	if raw.title != "Versions (raw)" || raw.crumb() != "raw" {
+		t.Errorf("revision's raw view: title=%q crumb=%q", raw.title, raw.crumb())
+	}
+}
+
+func TestSavePromptStaysOneLine(t *testing.T) {
+	var v saveState
+	v.start("w1-mods", []byte("<mods/>"))
+	v.notice, v.failed = "./x.xml already exists. Choose another name.", true
+	if out := ansi.Strip(v.view()); strings.Contains(out, "\n") || !strings.Contains(out, "already exists") {
+		t.Errorf("save prompt with a problem: %q", out)
+	}
+	v, _ = v.update(esc, nil)
+	if v.active || v.notice != "" {
+		t.Error("esc should close the prompt and clear its message")
+	}
+}

@@ -280,7 +280,7 @@ func fileVersionsSection(sess *session, obj atlas.Object) screen {
 					note:  joinNonEmpty(when(v.Created), byNUID(v.ActorNUID, v.OnBehalfOfNUID), size),
 					open: func(sess *session) screen {
 						return staticPager(sess, title, objectContext(obj), fieldsRender(fields)).
-							withRaw(atlas.PathFileVersions(obj.NOID), stem(obj, "versions"))
+							withRaw(atlas.PathFileVersions(obj.NOID), stem(obj, "versions")).rawTitled("Versions")
 					},
 				}
 			}

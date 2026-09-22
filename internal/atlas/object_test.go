@@ -182,3 +182,16 @@ func TestInspectNamesAFileSetByItsType(t *testing.T) {
 		t.Errorf("title = %q, %v", obj.Title, err)
 	}
 }
+
+func TestInspectNamesTheRecordByPID(t *testing.T) {
+	// Atlas redirects some types to their Valkyrie UUID; the path shown (and
+	// re-read by the raw view) uses the PID.
+	srv := fakeAtlas(t,
+		map[string]string{"/resources/w1": "/works/9fb283e3-4a58"},
+		nil,
+		map[string]string{"/works/9fb283e3-4a58": `{"work":{"id":"w1","title":"Harbor"}}`})
+	obj, err := New(srv.URL, "tok").Inspect(context.Background(), "w1")
+	if err != nil || obj.Path != "/works/w1" {
+		t.Errorf("path = %q, %v", obj.Path, err)
+	}
+}

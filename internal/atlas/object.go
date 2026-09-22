@@ -88,8 +88,14 @@ func (c *Client) Inspect(ctx context.Context, noid string) (Object, error) {
 	if err != nil {
 		return Object{}, badResponse(path, err)
 	}
-	obj.Type = typeByRoute[strings.Split(strings.TrimPrefix(path, "/"), "/")[0]]
+	route := strings.Split(strings.TrimPrefix(path, "/"), "/")[0]
+	obj.Type = typeByRoute[route]
 	obj.Path = path
+	// Atlas redirects some types to a route keyed by their Valkyrie UUID; name
+	// the record by its PID instead, which the same route also answers to.
+	if obj.NOID != "" {
+		obj.Path = "/" + route + "/" + esc(obj.NOID)
+	}
 	// A FileSet has no title of its own; its classification ("Audio") names it.
 	if obj.Type == TypeFileSet {
 		for _, f := range obj.Fields {
