@@ -128,10 +128,29 @@ func (c cli) get(args []string) int {
 		return exitUsage
 	}
 	if body, err = client.Raw(ctx, path); err != nil {
+		if errors.Is(err, atlas.ErrNotFound) {
+			return c.sectionNotFound(ctx, client, pid, sec.name, typ)
+		}
 		p := explain(fmt.Sprintf("Couldn't get %s for PID %s.", sec.name, pid), err)
 		return c.getFailed(p, err)
 	}
 	return c.emit(body)
+}
+
+// sectionNotFound tells apart the two things a 404 on a section's route can
+// mean: no object has the PID (exit 3), or the object exists and has no such
+// section — a FileSet with no METS, the ancestry of a Work — which is a
+// failure, not a missing PID. typ is the object's type if already resolved.
+func (c cli) sectionNotFound(ctx context.Context, client *atlas.Client, pid, section string, typ atlas.Type) int {
+	if typ == "" {
+		obj, err := client.Inspect(ctx, pid)
+		if err != nil {
+			return c.getFailed(inspectProblem(pid, err), err)
+		}
+		typ = obj.Type
+	}
+	fmt.Fprintf(c.stderr, "hyperion: PID %s is a %s; Atlas has no %s for it.\n", pid, typ, section)
+	return exitFailed
 }
 
 // emit writes a body to stdout unchanged — except that a terminal gets a

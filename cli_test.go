@@ -105,7 +105,8 @@ func TestGetFailures(t *testing.T) {
 		stderr string
 	}{
 		{[]string{"get", "nope"}, exitNotFound, "No object has this PID"},
-		{[]string{"get", "nope", "mods"}, exitNotFound, "Couldn't get mods for PID nope"},
+		{[]string{"get", "nope", "mods"}, exitNotFound, "No object has this PID"},
+		{[]string{"get", "w1", "ancestry"}, exitFailed, "PID w1 is a Work; Atlas has no ancestry for it."},
 		{[]string{"get", "b1"}, exitFailed, "NoMethodError: undefined method 'blob_url'"},
 		{[]string{"get", "w1", "children"}, exitUsage, "a Work has no children"},
 		{[]string{"get", "w1", "thumbnails"}, exitUsage, `no section "thumbnails"`},

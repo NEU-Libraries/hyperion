@@ -113,7 +113,10 @@ func metsSection(sess *session, obj atlas.Object) screen {
 	return newPagerScreen(sess, "METS", objectContext(obj), func(ctx context.Context, c *atlas.Client) (doc, error) {
 		mets, err := c.METS(ctx, obj.Type, obj.NOID)
 		if errors.Is(err, atlas.ErrNotFound) {
-			return doc{}, userErr("No METS yet: Atlas builds it when the Work is completed.")
+			if obj.Type == atlas.TypeWork {
+				return doc{}, userErr("No METS yet: Atlas builds it when the Work is completed.")
+			}
+			return doc{}, userErr("This FileSet has no METS.")
 		}
 		if err != nil {
 			return doc{}, err
