@@ -298,7 +298,7 @@ func (s pagerScreen) View() string {
 	case loading:
 		return head + s.spinner.View() + " Loading…"
 	case failed:
-		return head + s.prob.view(s.sess.cols(), "go back")
+		return head + s.prob.view(s.sess.cols(), backKeys)
 	}
 	return head + s.vp.View() + "\n\n" + s.footer()
 }

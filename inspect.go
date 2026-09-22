@@ -146,7 +146,7 @@ func (s objectScreen) View() string {
 	case loading:
 		return s.spinner.View() + " Resolving PID " + s.pid + "…"
 	case failed:
-		return s.prob.view(s.sess.cols(), "go back")
+		return s.prob.view(s.sess.cols(), backKeys)
 	}
 
 	var b strings.Builder

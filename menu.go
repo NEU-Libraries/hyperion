@@ -38,7 +38,9 @@ func (s menuScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.sel = min(s.sel+1, len(s.items)-1)
 	case "enter":
 		return s, push(s.items[s.sel].open(s.sess))
-	case "q", "esc":
+	case "q":
+		// Not esc: everywhere else esc means back, so one press too many
+		// would end the session.
 		return s, tea.Quit
 	}
 	return s, nil

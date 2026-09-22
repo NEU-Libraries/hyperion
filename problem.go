@@ -85,9 +85,12 @@ func statusReason(status int) string {
 	}
 }
 
+// backKeys is the usual way off an error screen.
+const backKeys = "enter or esc to go back"
+
 // view renders the problem wrapped to width (0 = unwrapped), ending with the
-// keys the screen offers. goBack is "go back" or "quit".
-func (p problem) view(width int, goBack string) string {
+// screen's way out (keys, e.g. backKeys) and, when Atlas sent a response, d.
+func (p problem) view(width int, keys string) string {
 	wrap := func(s string, indent int) string {
 		if width <= indent+10 {
 			return strings.Repeat(" ", indent) + s
@@ -103,17 +106,20 @@ func (p problem) view(width int, goBack string) string {
 			b.WriteString(dimStyle.Render(wrap(d, 2)) + "\n")
 		}
 	}
-	keys := "press any key to " + goBack
 	if p.raw != nil {
-		keys = "d to see Atlas's full response · any other key to " + goBack
+		keys = "d to see Atlas's full response · " + keys
 	}
 	b.WriteString("\n" + dimStyle.Render(keys))
 	return b.String()
 }
 
 // problemKey handles a key press on a screen showing p: d opens Atlas's full
-// response when there is one, and any other key leaves via leave.
+// response when there is one, and enter, esc, or q leaves via leave. Other
+// keys do nothing, so typing that runs on past an error can't skip screens.
 func problemKey(sess *session, p problem, msg tea.KeyMsg, leave tea.Cmd) tea.Cmd {
+	if isBackKey(msg) {
+		return leave
+	}
 	if msg.String() == "d" && p.raw != nil {
 		pg := newPagerScreen(sess, "Atlas's response", p.headline, func(context.Context, *atlas.Client) (doc, error) {
 			return doc{render: responseRender(p.raw), raw: p.raw}, nil
@@ -121,7 +127,17 @@ func problemKey(sess *session, p problem, msg tea.KeyMsg, leave tea.Cmd) tea.Cmd
 		pg.rawName = "atlas-error"
 		return push(pg)
 	}
-	return leave
+	return nil
+}
+
+// isBackKey reports the keys that leave a screen showing a result: enter,
+// esc, and q.
+func isBackKey(msg tea.KeyMsg) bool {
+	switch msg.String() {
+	case "enter", "esc", "q":
+		return true
+	}
+	return false
 }
 
 // briefError is the few words a list row or summary line has room for.

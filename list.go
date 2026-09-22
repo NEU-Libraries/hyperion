@@ -217,7 +217,7 @@ func (s listScreen) View() string {
 	case loading:
 		return head + s.spinner.View() + " Loading…"
 	case failed:
-		return head + s.prob.view(s.sess.cols(), "go back")
+		return head + s.prob.view(s.sess.cols(), backKeys)
 	}
 	if len(s.items) == 0 {
 		help := "esc to go back"

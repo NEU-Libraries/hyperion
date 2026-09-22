@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"hyperion/internal/atlas"
@@ -26,6 +27,7 @@ type loginScreen struct {
 	sess  *session
 	state loginState
 	prob  problem
+	err   error // why sign-in failed, to choose where a retry starts
 
 	urlInput   textinput.Model
 	tokenInput textinput.Model
@@ -95,6 +97,7 @@ func (s loginScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	case authMsg:
 		if msg.err != nil {
 			s.prob = explain("Couldn't sign in to Atlas.", msg.err)
+			s.err = msg.err
 			s.state = loginError
 			return s, nil
 		}
@@ -157,9 +160,32 @@ func (s loginScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		return s, cmd
 
 	case loginError:
-		return s, tea.Quit
+		switch msg.String() {
+		case "enter":
+			return s.retry()
+		case "esc", "q":
+			return s, tea.Quit
+		}
 	}
 	return s, nil
+}
+
+// retry goes back to the prompt the failure points at: a rejected token to
+// a fresh token prompt, anything else (a wrong URL, no network) to the URL
+// prompt with the URL kept for correcting.
+func (s loginScreen) retry() (screen, tea.Cmd) {
+	if errors.Is(s.err, atlas.ErrUnauthorized) || errors.Is(s.err, atlas.ErrForbidden) {
+		s.sess.token = ""
+		s.tokenInput.SetValue("")
+		s.tokenInput.Focus()
+		s.state = loginToken
+		return s, textinput.Blink
+	}
+	s.urlInput.SetValue(s.sess.url)
+	s.urlInput.CursorEnd()
+	s.urlInput.Focus()
+	s.state = loginURL
+	return s, textinput.Blink
 }
 
 func (s loginScreen) authCmd() tea.Cmd {
@@ -180,7 +206,7 @@ func (s loginScreen) View() string {
 	case loginAuth:
 		return s.spinner.View() + " Authenticating…"
 	default:
-		return s.prob.view(s.sess.cols(), "quit")
+		return s.prob.view(s.sess.cols(), "enter to try again · esc to quit")
 	}
 }
 

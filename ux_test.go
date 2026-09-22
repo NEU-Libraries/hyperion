@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -80,5 +81,36 @@ func TestCutValuesShowTheirEllipsis(t *testing.T) {
 		if strings.Contains(l, "sample-audio.mp3") && !strings.HasSuffix(strings.TrimRight(l, " "), "…") {
 			t.Errorf("a cut list row should end in …: %q", l)
 		}
+	}
+}
+
+func TestSignInErrorOffersARetry(t *testing.T) {
+	// A rejected token goes back to a fresh token prompt, URL kept.
+	sess := &session{url: "http://atlas.example", token: "old"}
+	s := newLoginScreen(sess)
+	next, _ := s.Update(authMsg{err: atlas.ErrUnauthorized})
+	s = next.(loginScreen)
+	if v := s.View(); !strings.Contains(v, "enter to try again · esc to quit") {
+		t.Errorf("sign-in error footer:\n%s", v)
+	}
+	if _, cmd := s.Update(typed("x")); cmd != nil {
+		t.Error("a stray key on the sign-in error should do nothing")
+	}
+	next, _ = s.Update(enter)
+	s = next.(loginScreen)
+	if s.state != loginToken || s.tokenInput.Value() != "" || sess.token != "" || sess.url != "http://atlas.example" {
+		t.Errorf("retry after a rejected token: state=%v token=%q url=%q", s.state, s.tokenInput.Value(), sess.url)
+	}
+
+	// Anything else — say Atlas can't be reached — goes back to the URL, kept.
+	s = newLoginScreen(&session{url: "http://typo.example", token: "tok"})
+	next, _ = s.Update(authMsg{err: errors.New("dial tcp: no such host")})
+	next, _ = next.Update(enter)
+	s = next.(loginScreen)
+	if s.state != loginURL || s.urlInput.Value() != "http://typo.example" {
+		t.Errorf("retry after a network error: state=%v url=%q", s.state, s.urlInput.Value())
+	}
+	if _, cmd := s.Update(esc); !isQuit(cmd) {
+		t.Error("esc on the URL prompt should still quit")
 	}
 }

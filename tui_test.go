@@ -139,8 +139,11 @@ func TestAppNavigation(t *testing.T) {
 		t.Fatalf("after esc: top = %T depth = %d, want menuScreen at depth 1", a.top(), len(a.stack))
 	}
 
-	if _, cmd := sendApp(a, esc); !isQuit(cmd) {
-		t.Error("esc on the menu should quit")
+	if _, cmd := sendApp(a, esc); cmd != nil {
+		t.Error("esc on the menu should do nothing; esc means back everywhere else")
+	}
+	if _, cmd := sendApp(a, typed("q")); !isQuit(cmd) {
+		t.Error("q on the menu should quit")
 	}
 	if _, cmd := sendApp(a, popMsg{}); !isQuit(cmd) {
 		t.Error("popping the last screen should quit")

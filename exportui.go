@@ -191,7 +191,10 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		}
 
 	case exportDone:
-		return s, pop
+		if isBackKey(msg) {
+			return s, pop
+		}
+		return s, nil
 	case exportError:
 		return s, problemKey(s.sess, s.prob, msg, pop)
 	}
@@ -268,7 +271,7 @@ func (s exportScreen) View() string {
 	case exportDone:
 		return s.viewDone()
 	default:
-		return s.prob.view(s.sess.cols(), "go back")
+		return s.prob.view(s.sess.cols(), backKeys)
 	}
 }
 
@@ -290,7 +293,7 @@ func (s exportScreen) viewDownloading() string {
 }
 
 func (s exportScreen) viewDone() string {
-	return s.summary() + "\n\n" + dimStyle.Render("press any key to go back")
+	return s.summary() + "\n\n" + dimStyle.Render(backKeys)
 }
 
 // summary tallies the finished export. It is also left on the terminal when

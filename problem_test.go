@@ -11,6 +11,8 @@ import (
 
 	"hyperion/internal/atlas"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -109,8 +111,16 @@ func TestProblemDetailsKey(t *testing.T) {
 	if !isPop(problemKey(sess, p, enter, pop)) {
 		t.Error("any other key should go back")
 	}
-	if !isPop(problemKey(sess, problem{headline: "x"}, typed("d"), pop)) {
-		t.Error("d with no response to show should just go back")
+	if cmd := problemKey(sess, problem{headline: "x"}, typed("d"), pop); cmd != nil {
+		t.Error("d with no response to show should do nothing")
+	}
+	if cmd := problemKey(sess, p, typed("x"), pop); cmd != nil {
+		t.Error("a stray letter on an error screen should do nothing")
+	}
+	for _, k := range []tea.KeyMsg{enter, esc, typed("q")} {
+		if !isPop(problemKey(sess, p, k, pop)) {
+			t.Errorf("%q should go back", k.String())
+		}
 	}
 }
 
