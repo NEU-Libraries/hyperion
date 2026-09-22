@@ -230,7 +230,7 @@ func (s listScreen) View() string {
 		if s.rawPath != "" {
 			help = "r raw · " + help
 		}
-		return head + dimStyle.Render(s.empty) + "\n\n" + dimStyle.Render(help)
+		return head + wrapped(dimStyle, s.empty, s.sess.cols()) + "\n\n" + dimStyle.Render(help)
 	}
 
 	var b strings.Builder

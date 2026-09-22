@@ -57,6 +57,15 @@ type notice string
 
 func (n notice) Error() string { return string(n) }
 
+// wrapped renders a message in style, folded to width (0 = unfolded) — for
+// sentences, which should wrap, where documents are cut and panned.
+func wrapped(style lipgloss.Style, msg string, width int) string {
+	if width > 0 {
+		style = style.Width(width)
+	}
+	return strings.TrimRight(style.Render(msg), " ")
+}
+
 // renderFunc lays out loaded content for a given terminal width (0 = unknown),
 // so a pager can re-flow it when the terminal is resized.
 type renderFunc func(width int) string
@@ -149,7 +158,7 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		var n notice
 		if errors.As(msg.err, &n) {
-			msg.doc, msg.err = doc{render: textRender(dimStyle.Render(string(n)))}, nil
+			msg.doc, msg.err = doc{render: func(width int) string { return wrapped(dimStyle, string(n), width) }}, nil
 		}
 		if msg.err != nil {
 			s.prob = explain("Couldn't load "+s.title+".", msg.err)
@@ -329,8 +338,13 @@ func (s pagerScreen) footer() string {
 	if s.save.active || s.save.notice != "" {
 		return s.save.view()
 	}
-	// Pan and wrap only matter when a line is too wide for the view.
-	keys := []string{"↑/↓ to scroll"}
+	// Offer only the keys that do something here: scrolling when there is
+	// more than fits, pan and wrap when a line is too wide for the view.
+	scrolls := !(s.vp.AtTop() && s.vp.AtBottom())
+	var keys []string
+	if scrolls {
+		keys = append(keys, "↑/↓ to scroll")
+	}
 	switch {
 	case s.wrapped:
 		keys = append(keys, "w unwrap")
@@ -347,7 +361,7 @@ func (s pagerScreen) footer() string {
 		keys = append(keys, "s save")
 	}
 	help := strings.Join(append(keys, "esc to go back"), " · ")
-	if !(s.vp.AtTop() && s.vp.AtBottom()) {
+	if scrolls {
 		help = fmt.Sprintf("%.0f%% · ", s.vp.ScrollPercent()*100) + help
 	}
 	return dimStyle.Render(help)

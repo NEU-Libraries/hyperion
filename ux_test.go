@@ -286,8 +286,8 @@ func TestHeaderLabelsTheNUID(t *testing.T) {
 
 func TestPagerOffersPanAndWrapOnlyWhenALineIsCut(t *testing.T) {
 	short := appAt(t, 80, 40, func(sess *session) screen { return staticPager(sess, "Permissions", "", textRender("Read  public")) })
-	if v := ansi.Strip(short.View()); strings.Contains(v, "pan") || strings.Contains(v, "wrap") {
-		t.Errorf("nothing is cut, so pan and wrap shouldn't be offered:\n%s", v)
+	if v := ansi.Strip(short.View()); strings.Contains(v, "pan") || strings.Contains(v, "wrap") || strings.Contains(v, "scroll") {
+		t.Errorf("nothing is cut or taller than the view, so only esc should be offered:\n%s", v)
 	}
 	long := appAt(t, 80, 40, func(sess *session) screen {
 		return staticPager(sess, "MODS", "", textRender(strings.Repeat("x", 120)))
@@ -339,5 +339,24 @@ func TestSavePromptStaysOneLine(t *testing.T) {
 	v, _ = v.update(esc, nil)
 	if v.active || v.notice != "" {
 		t.Error("esc should close the prompt and clear its message")
+	}
+}
+
+func TestNoticesWrapRatherThanCut(t *testing.T) {
+	a := appAt(t, 60, 30, func(sess *session) screen {
+		return newPagerScreen(sess, "MODS history", "", func(context.Context, *atlas.Client) (doc, error) {
+			return doc{}, notice(modsHistoryLimit)
+		})
+	})
+	flat := strings.Join(strings.Fields(strings.Join(visibleLines(t, a), " ")), " ")
+	if !strings.Contains(flat, modsHistoryLimit) {
+		t.Errorf("the notice should wrap whole:\n%s", ansi.Strip(a.View()))
+	}
+	l := appAt(t, 40, 30, func(sess *session) screen {
+		return staticList(sess, "Linked collections", "", "This Work is linked into no collections beyond its parent.", nil)
+	})
+	flat = strings.Join(strings.Fields(strings.Join(visibleLines(t, l), " ")), " ")
+	if !strings.Contains(flat, "linked into no collections beyond its parent.") {
+		t.Errorf("an empty list's message should wrap whole:\n%s", ansi.Strip(l.View()))
 	}
 }
