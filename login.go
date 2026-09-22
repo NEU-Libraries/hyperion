@@ -180,7 +180,7 @@ func (s loginScreen) View() string {
 	case loginAuth:
 		return s.spinner.View() + " Authenticating…"
 	default:
-		return s.prob.view(s.sess.width, "quit")
+		return s.prob.view(s.sess.cols(), "quit")
 	}
 }
 

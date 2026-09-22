@@ -146,7 +146,7 @@ func (s objectScreen) View() string {
 	case loading:
 		return s.spinner.View() + " Resolving PID " + s.pid + "…"
 	case failed:
-		return s.prob.view(s.sess.width, "go back")
+		return s.prob.view(s.sess.cols(), "go back")
 	}
 
 	var b strings.Builder
@@ -155,10 +155,10 @@ func (s objectScreen) View() string {
 		head += "  " + warnStyle.Render("tombstoned")
 	}
 	b.WriteString(head + "\n")
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render(truncate(s.obj.Title, s.sess.width)) + "\n")
+	b.WriteString(lipgloss.NewStyle().Bold(true).Render(truncate(s.obj.Title, s.sess.cols())) + "\n")
 	lines := 2
 	if crumb := breadcrumb(s.obj.Ancestors); crumb != "" {
-		b.WriteString(dimStyle.Render(truncate(crumb, s.sess.width)) + "\n")
+		b.WriteString(dimStyle.Render(truncate(crumb, s.sess.cols())) + "\n")
 		lines++
 	}
 
@@ -213,8 +213,8 @@ func (s objectScreen) viewFields(room int) string {
 		}
 	}
 	valueWidth := 0
-	if s.sess.width > 0 {
-		valueWidth = max(s.sess.width-labelWidth-2, 10)
+	if s.sess.cols() > 0 {
+		valueWidth = max(s.sess.cols()-labelWidth-2, 10)
 	}
 
 	cut := len(shown) > room

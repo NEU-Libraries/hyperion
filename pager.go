@@ -211,8 +211,8 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 // source line at the top of the view stays at the top.
 func (s *pagerScreen) layout() {
 	top := s.sourceLine(s.vp.YOffset)
-	width := max(s.sess.width-1, 0) // the app keeps clear of the last column
-	text := s.render(s.sess.width)
+	width := s.sess.cols()
+	text := s.render(width)
 
 	s.vp.Width, s.vp.Height = width, bodyHeight(s.sess)
 	s.wrapped = s.sess.wrap && width > 0
@@ -293,12 +293,12 @@ func wrapLines(text string, width int) (string, []int) {
 func (s pagerScreen) crumb() string { return s.title }
 
 func (s pagerScreen) View() string {
-	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.width)) + "\n\n"
+	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.cols())) + "\n\n"
 	switch s.state {
 	case loading:
 		return head + s.spinner.View() + " Loading…"
 	case failed:
-		return head + s.prob.view(s.sess.width, "go back")
+		return head + s.prob.view(s.sess.cols(), "go back")
 	}
 	return head + s.vp.View() + "\n\n" + s.footer()
 }

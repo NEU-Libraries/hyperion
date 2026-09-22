@@ -212,12 +212,12 @@ func (s listScreen) lookups() tea.Cmd {
 func (s listScreen) crumb() string { return s.title }
 
 func (s listScreen) View() string {
-	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.width)) + "\n\n"
+	head := titleStyle.Render(s.title) + "\n" + dimStyle.Render(truncate(s.about, s.sess.cols())) + "\n\n"
 	switch s.state {
 	case loading:
 		return head + s.spinner.View() + " Loading…"
 	case failed:
-		return head + s.prob.view(s.sess.width, "go back")
+		return head + s.prob.view(s.sess.cols(), "go back")
 	}
 	if len(s.items) == 0 {
 		help := "esc to go back"
@@ -255,7 +255,7 @@ func (s listScreen) row(it listItem, selected bool) string {
 		detail = append(detail, it.note)
 	}
 
-	width := s.sess.width
+	width := s.sess.cols()
 	avail := func(used int) int {
 		if width <= 0 {
 			return 0

@@ -268,7 +268,7 @@ func (s exportScreen) View() string {
 	case exportDone:
 		return s.viewDone()
 	default:
-		return s.prob.view(s.sess.width, "go back")
+		return s.prob.view(s.sess.cols(), "go back")
 	}
 }
 

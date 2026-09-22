@@ -44,6 +44,16 @@ func runTUI(url, token string, concurrency int) int {
 
 // session is the state every screen shares: credentials, the authenticated
 // client and user, and the terminal size. Screens hold a pointer to it.
+// cols is how many columns a screen may lay out in: one short of the
+// terminal, because the app keeps every line clear of the last column (see
+// app.View). 0 means the width isn't known yet.
+func (s *session) cols() int {
+	if s.width <= 1 {
+		return 0
+	}
+	return s.width - 1
+}
+
 type session struct {
 	url, token  string
 	concurrency int
