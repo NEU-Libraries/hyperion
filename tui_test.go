@@ -275,18 +275,18 @@ func TestInspectFlow(t *testing.T) {
 	a, _ = sendApp(a, typed("w1"))
 	a = navigate(t, a, enter)
 	obj, ok := a.top().(objectScreen)
-	if !ok || obj.pid != "w1" || obj.state != objectLoading {
+	if !ok || obj.pid != "w1" || obj.state != loading {
 		t.Fatalf("after PID: top = %T %+v, want loading objectScreen for w1", a.top(), a.top())
 	}
 
-	// A result for some other PID (a stale load) is ignored.
-	a, _ = sendApp(a, objectMsg{pid: "other", err: atlas.ErrNotFound})
-	if a.top().(objectScreen).state != objectLoading {
-		t.Fatal("a result for another PID changed the screen")
+	// A result meant for another screen (a stale load) is ignored.
+	a, _ = sendApp(a, objectMsg{id: obj.id + 1000, err: atlas.ErrNotFound})
+	if a.top().(objectScreen).state != loading {
+		t.Fatal("a result for another screen changed this one")
 	}
 
 	a.sess.width = 80
-	a, _ = sendApp(a, objectMsg{pid: "w1", obj: atlas.Object{
+	a, _ = sendApp(a, objectMsg{id: obj.id, obj: atlas.Object{
 		Type: atlas.TypeWork, NOID: "w1", Title: "Boston Harbor, 1775",
 		Ancestors: []atlas.Ancestor{{NOID: "c0", Klass: "Community", Title: "Library"}, {NOID: "k1", Klass: "Collection"}},
 		Fields: []atlas.Field{
@@ -303,6 +303,7 @@ func TestInspectFlow(t *testing.T) {
 		"Work", "PID", "Boston Harbor, 1775",
 		"Library (c0) › (untitled collection) (k1)",
 		"Depositor (NUID)", "001234567", "Tombstoned", "yes", `{"large":["public"]}`,
+		"› Record", "MODS history", "FileSets", "Associations", "Ancestors", "Permissions",
 	} {
 		if !strings.Contains(v, want) {
 			t.Errorf("object view missing %q:\n%s", want, v)
@@ -314,6 +315,12 @@ func TestInspectFlow(t *testing.T) {
 	if strings.Count(v, "Boston Harbor, 1775") != 1 {
 		t.Errorf("title should appear once (header only):\n%s", v)
 	}
+
+	a = navigate(t, a, enter) // the first section is the full record
+	if pg, ok := a.top().(pagerScreen); !ok || pg.title != "Record" {
+		t.Fatalf("enter on the overview: top = %T, want the Record pager", a.top())
+	}
+	a = navigate(t, a, esc)
 
 	a = navigate(t, a, esc) // back to the prompt, PID kept
 	p, ok := a.top().(pidPromptScreen)
@@ -329,9 +336,9 @@ func TestInspectErrorMessages(t *testing.T) {
 		atlas.ErrUnauthorized: "access token rejected",
 	} {
 		s := newObjectScreen(testSession(), "zzz")
-		next, _ := s.Update(objectMsg{pid: "zzz", err: err})
+		next, _ := s.Update(objectMsg{id: s.id, err: err})
 		got := next.(objectScreen)
-		if got.state != objectError || !strings.Contains(got.View(), want) {
+		if got.state != failed || !strings.Contains(got.View(), want) {
 			t.Errorf("%v: view = %q, want %q", err, got.View(), want)
 		}
 		if _, cmd := got.Update(enter); !isPop(cmd) {

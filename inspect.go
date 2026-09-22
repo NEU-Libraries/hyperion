@@ -57,71 +57,79 @@ func (s pidPromptScreen) View() string {
 	return "Inspect an object\n\n" + s.input.View() + "\n\n" + dimStyle.Render("enter to inspect · esc to go back")
 }
 
-type objectState int
-
-const (
-	objectLoading objectState = iota
-	objectLoaded
-	objectError
-)
-
-// objectScreen shows one resolved object: its type, title, ancestor chain, and
-// every field of its record in the order Atlas sent them.
+// objectScreen shows one resolved object: its type, title, and ancestor
+// chain, a menu of the sections that apply to its type, and as much of its
+// record as fits below.
 type objectScreen struct {
-	sess    *session
-	pid     string
-	state   objectState
-	obj     atlas.Object
-	err     error
-	spinner spinner.Model
+	sess     *session
+	id       int64
+	pid      string
+	extra    []section
+	state    loadState
+	obj      atlas.Object
+	sections []section
+	sel      int
+	err      error
+	spinner  spinner.Model
 }
 
 type objectMsg struct {
-	pid string
+	id  int64
 	obj atlas.Object
 	err error
 }
 
-func newObjectScreen(sess *session, pid string) objectScreen {
-	return objectScreen{sess: sess, pid: pid, spinner: newSpinner()}
+// newObjectScreen opens pid. extra adds sections the caller already has the
+// data for, after the type's own.
+func newObjectScreen(sess *session, pid string, extra ...section) objectScreen {
+	return objectScreen{sess: sess, id: nextScreenID(), pid: pid, extra: extra, spinner: newSpinner()}
 }
 
 func (s objectScreen) Init() tea.Cmd {
-	client, pid := s.sess.client, s.pid
+	id, client, pid := s.id, s.sess.client, s.pid
 	return tea.Batch(s.spinner.Tick, func() tea.Msg {
 		obj, err := client.Inspect(context.Background(), pid)
-		return objectMsg{pid: pid, obj: obj, err: err}
+		return objectMsg{id: id, obj: obj, err: err}
 	})
 }
 
 func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case objectMsg:
-		if msg.pid != s.pid {
+		if msg.id != s.id {
 			return s, nil
 		}
 		if msg.err != nil {
 			s.err = errors.New(inspectMessage(msg.err, s.pid))
-			s.state = objectError
+			s.state = failed
 			return s, nil
 		}
 		s.obj = msg.obj
-		s.state = objectLoaded
+		s.sections = sectionsFor(msg.obj, s.extra)
+		s.state = loaded
 		return s, nil
 	case spinner.TickMsg:
-		if s.state != objectLoading {
+		if s.state != loading {
 			return s, nil
 		}
 		var cmd tea.Cmd
 		s.spinner, cmd = s.spinner.Update(msg)
 		return s, cmd
 	case tea.KeyMsg:
-		if s.state == objectError {
+		if s.state == failed {
 			return s, pop
 		}
 		switch msg.String() {
 		case "esc", "q":
 			return s, pop
+		case "up", "k":
+			s.sel = max(s.sel-1, 0)
+		case "down", "j":
+			s.sel = min(s.sel+1, len(s.sections)-1)
+		case "enter":
+			if s.state == loaded {
+				return s, push(s.sections[s.sel].open(s.sess, s.obj))
+			}
 		}
 	}
 	return s, nil
@@ -129,30 +137,53 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 
 func (s objectScreen) View() string {
 	switch s.state {
-	case objectLoading:
+	case loading:
 		return s.spinner.View() + " Resolving PID " + s.pid + "…"
-	case objectError:
+	case failed:
 		return errStyle.Render("✗ ") + s.err.Error() + "\n\n" + dimStyle.Render("press any key to go back")
 	}
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(string(s.obj.Type)) + dimStyle.Render("  PID ") + s.obj.NOID + "\n")
+	head := titleStyle.Render(string(s.obj.Type)) + dimStyle.Render("  PID ") + s.obj.NOID
+	if tombstoned(s.obj) {
+		head += "  " + warnStyle.Render("tombstoned")
+	}
+	b.WriteString(head + "\n")
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render(truncate(s.obj.Title, s.sess.width)) + "\n")
+	lines := 2
 	if crumb := breadcrumb(s.obj.Ancestors); crumb != "" {
 		b.WriteString(dimStyle.Render(truncate(crumb, s.sess.width)) + "\n")
+		lines++
 	}
-	b.WriteString("\n" + s.viewFields() + "\n")
-	b.WriteString(dimStyle.Render("esc to go back"))
+
+	labels := make([]string, len(s.sections))
+	for i, sec := range s.sections {
+		labels[i] = sec.label
+	}
+	b.WriteString("\n" + menuView(labels, s.sel) + "\n")
+
+	// The app header (3), the lines above, two gaps, the footer (2), and the
+	// trailing newline frame the menu; the record preview gets the rest.
+	room := 1 << 20
+	if s.sess.height > 0 {
+		room = s.sess.height - 3 - lines - 2 - len(s.sections) - 3
+	}
+	b.WriteString(s.viewFields(room))
+	b.WriteString("\n" + dimStyle.Render("↑/↓ to move · enter to open · esc to go back"))
 	return b.String()
 }
 
 // hiddenFields are shown above the field list (title, breadcrumb), not in it.
 var hiddenFields = map[string]bool{"title": true, "ancestors": true}
 
-func (s objectScreen) viewFields() string {
+// viewFields previews the record in at most room lines, pointing at the
+// Record section when it doesn't all fit.
+func (s objectScreen) viewFields(room int) string {
+	var shown []atlas.Field
 	labelWidth := 0
 	for _, f := range s.obj.Fields {
 		if !hiddenFields[f.Key] {
+			shown = append(shown, f)
 			labelWidth = max(labelWidth, lipgloss.Width(fieldLabel(f.Key)))
 		}
 	}
@@ -161,13 +192,17 @@ func (s objectScreen) viewFields() string {
 		valueWidth = max(s.sess.width-labelWidth-2, 10)
 	}
 
+	cut := len(shown) > room
+	if cut {
+		shown = shown[:max(room-1, 0)]
+	}
 	var b strings.Builder
-	for _, f := range s.obj.Fields {
-		if hiddenFields[f.Key] {
-			continue
-		}
+	for _, f := range shown {
 		b.WriteString(dimStyle.Render(fmt.Sprintf("%-*s", labelWidth, fieldLabel(f.Key))) + "  " +
 			fieldValue(f.Key, f.Value, valueWidth) + "\n")
+	}
+	if cut && room > 0 {
+		b.WriteString(dimStyle.Render("… open Record for every field") + "\n")
 	}
 	return b.String()
 }
@@ -193,6 +228,10 @@ var fieldLabels = map[string]string{
 	"included_collections":     "Included collections (PIDs)",
 	"included_works":           "Included works (PIDs)",
 	"excluded_works":           "Excluded works (PIDs)",
+	"version_id":               "Version ID",
+	"actor_nuid":               "Actor (NUID)",
+	"on_behalf_of_nuid":        "On behalf of (NUID)",
+	"read_groups":              "Read groups",
 }
 
 func fieldLabel(key string) string {

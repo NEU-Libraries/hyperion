@@ -97,12 +97,32 @@ listed) — so it composes in a pipeline.
    from it and fetches that route from your configured Atlas URL.
 2. A Set isn't served by `/resources/:id`, so a 404 there falls back to
    `/compilations/:id`.
-3. Shows the type, title, and ancestor chain, then every field of the record in
-   the order Atlas sends it. Object ids are labelled **PID** and person ids
-   **NUID** (depositor, proxy uploader, …).
+3. Shows the type, title, and ancestor chain, a menu of the sections that apply
+   to that type, and as much of the record as fits. Object ids are labelled
+   **PID** and person ids **NUID** (depositor, proxy uploader, …).
 
 A PID that doesn't exist and one your token may not read get different
-messages, as Atlas keeps them apart (404 vs 403).
+messages, as Atlas keeps them apart (404 vs 403). A tombstoned object still
+inspects — Atlas serves its record with a 410.
+
+| Section | Types | Atlas route |
+| --- | --- | --- |
+| Record | all | the typed record, every field |
+| MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (admin only) |
+| METS | Work, FileSet | `/works/:id/mets`, `/file_sets/:id/mets` |
+| FileSets, Files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
+| Linked collections, Associations | Work | `/works/:id/linked_members`, `/works/:id/associations` |
+| Children | Collection, Community | `…/children` |
+| Contents | Set | `/compilations/:id/contents` |
+| FileSet and Work, Versions | File | `/files/:id/ancestry`, `/files/:id/versions` |
+| Ancestors, Referenced PIDs | when present | from the record |
+| Permissions | all but Set | `/resources/:id/permissions` |
+
+Enter on any object in a section opens that object; `esc` comes back. Lists
+that Atlas returns as bare PIDs (children, linked collections, associations)
+look up each title as its row scrolls into view. Atlas has no route that lists
+a FileSet's files, so a FileSet opened from its Work's FileSets carries them in
+a Files section; opened by PID, it has none.
 
 ### Export
 

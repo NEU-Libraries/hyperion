@@ -144,7 +144,7 @@ func parseObject(body []byte) (Object, error) {
 		record = v
 	}
 
-	fields, err := orderedFields(record)
+	fields, err := OrderedFields(record)
 	if err != nil {
 		return Object{}, err
 	}
@@ -161,9 +161,9 @@ func parseObject(body []byte) (Object, error) {
 	return obj, nil
 }
 
-// orderedFields splits a JSON object into its keys in document order, which a
+// OrderedFields splits a JSON object into its keys in document order, which a
 // Go map would lose.
-func orderedFields(record json.RawMessage) ([]Field, error) {
+func OrderedFields(record json.RawMessage) ([]Field, error) {
 	dec := json.NewDecoder(bytes.NewReader(record))
 	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
 		return nil, fmt.Errorf("record is not an object")
