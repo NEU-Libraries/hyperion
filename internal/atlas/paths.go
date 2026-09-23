@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 // Paths of the Atlas routes hyperion reads, with the id path-escaped. The
@@ -26,6 +27,22 @@ func PathFileAncestry(id string) string   { return "/files/" + esc(id) + "/ances
 func PathFileVersions(id string) string   { return "/files/" + esc(id) + "/versions" }
 func PathSetContents(id string, page int) string {
 	return fmt.Sprintf("/compilations/%s/contents?page=%d&per_page=100", esc(id), page)
+}
+
+// PathSearch builds the catalog search route. The text is user input, so it
+// goes through url.Values rather than string joining; an empty q or t is left
+// out.
+func PathSearch(q string, t Type, page, perPage int) string {
+	v := url.Values{}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if t != "" {
+		v.Set("type", string(t))
+	}
+	v.Set("page", strconv.Itoa(page))
+	v.Set("per_page", strconv.Itoa(perPage))
+	return "/resources/search?" + v.Encode()
 }
 
 func PathChildren(t Type, id string) string {
