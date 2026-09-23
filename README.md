@@ -1,8 +1,8 @@
 # Hyperion
 
-Inspect any Digital Repository Service object by **PID** — its type, title,
-ancestors, and every field of its Atlas record — without cURL or a hand-built
-bearer header. And bulk-export the descriptive **MODS** metadata for every
+Search the catalog, or inspect any Digital Repository Service object by
+**PID** — its type, title, ancestors, and every field of its Atlas record —
+without cURL or a hand-built bearer header. And bulk-export the descriptive **MODS** metadata for every
 member of a **Collection** or **Set** — one `<pid>.xml` file per member.
 
 Hyperion only ever reads: its Atlas client has no verb but `GET`.
@@ -58,7 +58,10 @@ script can't be prompted).
 
 Run with no arguments. If `ATLAS_URL` / `ATLAS_JWT` aren't set, Hyperion prompts
 for them first; if sign-in fails, `enter` tries again with what you typed kept.
-It then shows who you're signed in as and opens the main menu. **Export MODS**
+It then shows who you're signed in as and opens the main menu. **Search the
+catalog** takes words, and `tab` narrows the search to Works, Collections,
+Communities or People; enter on a result opens it as if you'd typed its PID. It
+shows the first 100 results, and says how many more matched. **Export MODS**
 asks whether you want a Collection or a Set, takes the **PID** and a folder,
 says how many MODS files it will save — and how many already in the folder it
 would replace — and downloads with a live progress bar. `esc` steps back a
@@ -115,6 +118,20 @@ Flags may come before or after the PID. Output to a pipe or file is never
 altered; on a terminal, a final newline is added if the body lacks one. Errors
 go to stderr in the same words the TUI uses. Run `./hyperion get --help` for
 the list above.
+
+### Search: the catalog's raw search response (scripts)
+
+`hyperion search` prints one page of up to 100 results from Atlas's catalog
+search — exactly as sent — to stdout. The results are only what your token may
+view. Page with `--page N`, reading `pagination.pages` for how many there are.
+
+```sh
+./hyperion search boston harbor | jq -r '.results[] | "\(.noid)  \(.title)"'
+./hyperion search --type Person hopper       # Work, Collection, Community or Person
+```
+
+Subjects, names and dates aren't searchable yet, and Sets aren't in the
+results: open a Set by its PID.
 
 ### Export (scripts / cron)
 
