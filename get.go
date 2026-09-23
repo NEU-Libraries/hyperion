@@ -46,7 +46,7 @@ var getSections = []getSection{
 		}
 		return atlas.PathMODS(pid)
 	}},
-	{"mods-history", "the retained MODS versions (full admins only)", false, "MODS history", descriptive,
+	{"mods-history", "the retained MODS versions (admins and delegated admins)", false, "MODS history", descriptive,
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathMODSVersions(pid) }},
 	{"mets", "METS, for a Work or FileSet", true, "METS", []atlas.Type{atlas.TypeWork, atlas.TypeFileSet},
 		func(t atlas.Type, pid string, _ getOptions) string { return atlas.PathMETS(t, pid) }},

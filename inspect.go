@@ -112,11 +112,11 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.obj = msg.obj
 		s.sections = sectionsFor(msg.obj, s.extra)
 		// Say up front what the account can't open, rather than as an error
-		// after choosing it. Atlas opens MODS history to full admins only.
-		if s.sess.user.Role != "admin" {
+		// after choosing it.
+		if !s.sess.user.ReadsMODSHistory() {
 			for i := range s.sections {
 				if s.sections[i].label == "MODS history" {
-					s.sections[i].label = "MODS history (full admins only)"
+					s.sections[i].label = "MODS history (admins only)"
 				}
 			}
 		}

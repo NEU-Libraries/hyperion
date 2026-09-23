@@ -102,7 +102,7 @@ hand-built cURL calls with a bearer header. Auth comes from `ATLAS_URL` /
 | --- | --- |
 | `record` | the object's record (the default) |
 | `mods` | MODS XML; with `--at VERSION`, as of that version |
-| `mods-history` | the retained MODS versions (full admins only) |
+| `mods-history` | the retained MODS versions (admins and delegated admins) |
 | `mets` | METS, for a Work or FileSet |
 | `permissions` | the access-control envelope |
 | `children` | PIDs directly beneath a Collection or Community |
@@ -160,7 +160,7 @@ the same flags with no subcommand — still works.
    (depositor, proxy uploader, …); timestamps show in local time.
 
 A section that simply has nothing — no METS yet, MODS history for someone who
-isn't a full admin — says so calmly rather than as an error.
+isn't an admin or a delegated admin — says so calmly rather than as an error.
 
 A PID that doesn't exist and one your account may not view get different
 messages, as Atlas keeps them apart (404 vs 403). A tombstoned object still
@@ -169,7 +169,7 @@ inspects — Atlas serves its record with a 410.
 | Section | Types | Atlas route |
 | --- | --- | --- |
 | Record | all | the typed record, every field |
-| MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (full admins only) |
+| MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (admins and delegated admins) |
 | METS | Work, FileSet | `/works/:id/mets`, `/file_sets/:id/mets` |
 | FileSets, Downloadable files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
 | Linked collections, Associations | Work | `/works/:id/linked_members`, `/works/:id/associations` |

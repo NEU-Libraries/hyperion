@@ -161,11 +161,11 @@ func TestExportSummaryShowsPartialFailure(t *testing.T) {
 
 // workOverview is an app showing a loaded Work with every section, at the
 // given terminal size.
-func workOverview(t *testing.T, width, height int, role string) app {
+func workOverview(t *testing.T, width, height int, role string, groups ...string) app {
 	t.Helper()
 	a := testApp()
 	a.sess.width, a.sess.height = width, height
-	a.sess.user.Role = role
+	a.sess.user.Role, a.sess.user.Groups = role, groups
 	a = navigate(t, a, enter)
 	a, _ = sendApp(a, typed("w1"))
 	a = navigate(t, a, enter)
@@ -200,15 +200,20 @@ func TestOverviewGroupsTheMenuAndLeadsThePreviewWithWhatMatters(t *testing.T) {
 	if !strings.Contains(v, "Record preview") {
 		t.Errorf("the preview should have a heading:\n%s", v)
 	}
-	if strings.Contains(v, "full admins only") {
+	if strings.Contains(v, "admins only") {
 		t.Error("a full admin's menu shouldn't mark MODS history as limited")
 	}
 	desc, valk := strings.Index(v, "Description"), strings.Index(v, "Valkyrie ID")
 	if desc < 0 || valk < 0 || valk < desc {
 		t.Errorf("technical fields should come after the descriptive ones:\n%s", v)
 	}
-	if v := ansi.Strip(workOverview(t, 110, 60, "privileged").View()); !strings.Contains(v, "MODS history (full admins only)") {
-		t.Errorf("a delegated admin's menu should mark MODS history:\n%s", v)
+	if v := ansi.Strip(workOverview(t, 110, 60, "privileged", atlas.AdminGroup).View()); strings.Contains(v, "admins only") {
+		t.Errorf("a delegated admin's menu shouldn't mark MODS history as limited:\n%s", v)
+	}
+	for _, other := range [][]string{{"privileged"}, {"user", atlas.AdminGroup}} {
+		if v := ansi.Strip(workOverview(t, 110, 60, other[0], other[1:]...).View()); !strings.Contains(v, "MODS history (admins only)") {
+			t.Errorf("%v: the menu should mark MODS history:\n%s", other, v)
+		}
 	}
 }
 
@@ -283,7 +288,7 @@ func TestMissingDocumentsAreNoticesNotFailures(t *testing.T) {
 	s := newListScreen(sess, "MODS history", "", "No retained MODS versions.",
 		func(context.Context, *atlas.Client) ([]listItem, error) { return nil, notice(modsHistoryLimit) })
 	s, _ = sendList(s, initResult[listMsg](t, s.Init()))
-	if v := ansi.Strip(s.View()); strings.Contains(v, "✗") || !strings.Contains(v, "only available to full admins") {
+	if v := ansi.Strip(s.View()); strings.Contains(v, "✗") || !strings.Contains(v, "only available to admins and delegated admins") {
 		t.Errorf("the MODS history limit should read as a notice:\n%s", v)
 	}
 }

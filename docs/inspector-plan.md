@@ -37,8 +37,8 @@ Known details:
   type from the final URL.
 - A Set (Compilation) PID returns 404 on `/resources/{id}`. Hyperion falls back
   to `/compilations/{id}`.
-- MODS version history is admin only. The screen says so instead of showing a
-  bare 403.
+- MODS version history is for admins and delegated admins only. The screen
+  says so instead of showing a bare 403.
 
 ## Steps
 

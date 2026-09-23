@@ -46,6 +46,29 @@ type User struct {
 	Groups []string `json:"groups"`
 }
 
+// AdminGroup is the Grouper group that, with the privileged role, makes a
+// delegated admin (Atlas's User#admin_delegate?).
+const AdminGroup = "northeastern:drs:repository:admin"
+
+// ReadsMODSHistory reports whether Atlas lets the user list an object's MODS
+// versions: a full admin, or a delegated admin, the privileged role in the
+// admin group. Atlas gates the list on :read_versions, as it does File
+// versions, because it names who made each edit.
+func (u User) ReadsMODSHistory() bool {
+	if u.Role == "admin" {
+		return true
+	}
+	if u.Role != "privileged" {
+		return false
+	}
+	for _, g := range u.Groups {
+		if g == AdminGroup {
+			return true
+		}
+	}
+	return false
+}
+
 // Member is one thing to export — a NOID and, when the source gave us one, a title.
 type Member struct {
 	NOID  string

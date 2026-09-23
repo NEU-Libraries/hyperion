@@ -72,8 +72,9 @@ func sectionsFor(obj atlas.Object, extra []section) []section {
 	return ss
 }
 
-// modsHistoryLimit is why MODS history won't open for anyone but a full admin.
-const modsHistoryLimit = "MODS history is only available to full admins, because it shows who made each edit."
+// modsHistoryLimit is why MODS history won't open for anyone but an admin or
+// a delegated admin.
+const modsHistoryLimit = "MODS history is only available to admins and delegated admins, because it shows who made each edit."
 
 // objectContext is the dimmed line under a section's title naming its object.
 func objectContext(obj atlas.Object) string {
