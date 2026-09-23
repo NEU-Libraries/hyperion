@@ -13,6 +13,7 @@ import (
 const (
 	workRecord = `{"work":{"id":"w1","title":"Harbor","tombstoned":false}}`
 	workMODS   = "<mods><titleInfo><title>Harbor</title></titleInfo></mods>"
+	searchBody = `{"results":[{"noid":"w1","klass":"Work","title":"Harbor"}],"pagination":{"total":1,"page":1,"per_page":100,"pages":1}}`
 )
 
 // fakeAtlasCLI serves a small repository: Work w1, Collection k1 holding it,
@@ -45,6 +46,13 @@ func fakeAtlasCLI(t *testing.T) *httptest.Server {
 			w.Write([]byte(workMODS))
 		case "/resources/w1/mods/versions/v2":
 			w.Write([]byte("<mods>v2</mods>\n"))
+		case "/resources/search?page=1&per_page=100&q=boston+harbor":
+			w.Write([]byte(searchBody))
+		case "/resources/search?page=2&per_page=100&q=harbor&type=Person":
+			w.Write([]byte(`{"results":[],"pagination":{"total":0,"page":2,"per_page":100,"pages":0}}`))
+		case "/resources/search?page=1&per_page=100&q=secret":
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"not allowed"}`))
 		case "/resources/b1":
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(`{"status":500,"exception":"#<NoMethodError: undefined method 'blob_url'>"}`))
@@ -189,5 +197,42 @@ func TestExportNamesTheWrongType(t *testing.T) {
 		if code != exitFailed || !strings.Contains(errOut, want) {
 			t.Errorf("%s: code=%d stderr=%q, want %q", args, code, errOut, want)
 		}
+	}
+}
+
+func TestSearchPrintsTheBodyUnchanged(t *testing.T) {
+	srv := fakeAtlasCLI(t)
+	code, out, errOut := runCLI(t, srv, false, "search", "boston", "harbor")
+	if code != 0 || out != searchBody || errOut != "" {
+		t.Errorf("search = %d %q %q", code, out, errOut)
+	}
+	if code, out, _ := runCLI(t, srv, false, "search", "harbor", "--type", "person", "--page", "2"); code != 0 || !strings.Contains(out, `"page":2`) {
+		t.Errorf("a narrowed second page = %d %q", code, out)
+	}
+}
+
+func TestSearchFailures(t *testing.T) {
+	srv := fakeAtlasCLI(t)
+	for _, c := range []struct {
+		args []string
+		code int
+		msg  string
+	}{
+		{[]string{"search"}, 2, "Usage: hyperion search"},
+		{[]string{"search", "harbor", "--type", "FileSet"}, 2, "--type must be one of Work, Collection, Community, Person"},
+		{[]string{"search", "harbor", "--page", "0"}, 2, "--page counts from 1"},
+		{[]string{"search", "secret"}, 1, "Couldn't search the catalog."},
+	} {
+		code, out, errOut := runCLI(t, srv, false, c.args...)
+		if code != c.code || out != "" || !strings.Contains(errOut, c.msg) {
+			t.Errorf("%v = %d %q %q; want %d and %q", c.args, code, out, errOut, c.code, c.msg)
+		}
+	}
+
+	var out, errOut bytes.Buffer
+	env := map[string]string{"ATLAS_URL": srv.URL, "ATLAS_JWT": "wrong"}
+	cl := cli{stdout: &out, stderr: &errOut, getenv: func(k string) string { return env[k] }}
+	if code := cl.run([]string{"search", "harbor"}); code != exitFailed || out.Len() != 0 {
+		t.Errorf("a rejected token = %d %q %q", code, out.String(), errOut.String())
 	}
 }

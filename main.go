@@ -1,6 +1,7 @@
 // Command hyperion inspects Digital Repository Service objects in Atlas and
 // bulk-exports the MODS of a Collection or Set. With no arguments it runs an
-// interactive TUI; `hyperion get` prints any object's raw Atlas response, and
+// interactive TUI; `hyperion get` prints any object's raw Atlas response,
+// `hyperion search` a page of catalog search hits, and
 // `hyperion export` (or the bare --type/--pid flags) exports headless. Auth is
 // a personal-access token in the environment (ATLAS_URL + ATLAS_JWT),
 // atlas_rb's BYO-JWT contract in Go.
@@ -50,6 +51,8 @@ func (c cli) run(args []string) int {
 		switch args[0] {
 		case "get":
 			return c.get(args[1:])
+		case "search":
+			return c.search(args[1:])
 		case "export":
 			return c.export(args[1:], true)
 		}
@@ -261,6 +264,7 @@ func (c cli) usage() {
 Usage:
   hyperion                                  interactive
   hyperion get <PID> [SECTION] [flags]      print Atlas's raw response
+  hyperion search <WORDS> [flags]           search the catalog, raw
   hyperion export --type TYPE --pid <PID>   export a Collection or Set's MODS
   hyperion --type TYPE --pid <PID>          the same export, the older form
 
@@ -277,7 +281,8 @@ Export flags:
   -v, --version         print version
   -h, --help            show this help
 
-Run hyperion get --help for its sections and flags.
+Run hyperion get --help for its sections and flags, and hyperion search
+--help for its flags.
 
 Exit status: 0 success, 1 failure, 2 usage, 3 no such PID.
 `, version)
