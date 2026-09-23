@@ -183,7 +183,8 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // headerLines is how many lines the app header takes above every screen once
-// signed in: the title, the user, a gap, the navigation trail, and a gap.
+// signed in: the title, the user, a gap, the navigation trail, and a gap. The
+// menu has no trail, so its header is two lines shorter.
 const headerLines = 5
 
 func (a app) View() string {
@@ -195,7 +196,9 @@ func (a app) View() string {
 	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
 	if a.sess.user.NUID != "" {
 		b.WriteString(okStyle.Render("✓ ") + fmt.Sprintf("Signed in as %s (NUID %s)\n", a.sess.user.Name, a.sess.user.NUID))
-		b.WriteString("\n" + a.trail() + "\n")
+		if trail := a.trail(); trail != "" {
+			b.WriteString("\n" + trail + "\n")
+		}
 	}
 	if a.quitting {
 		b.WriteString("\n" + a.quitView() + "\n")

@@ -9,6 +9,7 @@ import (
 	"hyperion/internal/export"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // These drive the screens' Update directly with the messages their commands
@@ -386,5 +387,12 @@ func TestFieldValues(t *testing.T) {
 	}
 	if got := fieldLabel("original_filename"); got != "Original filename" {
 		t.Errorf("fieldLabel = %q", got)
+	}
+}
+
+func TestTheMenuHasNoGapForAnEmptyTrail(t *testing.T) {
+	lines := strings.Split(ansi.Strip(testApp().View()), "\n")
+	if len(lines) < 4 || !strings.HasPrefix(lines[1], "✓ Signed in") || lines[2] != "" || !strings.HasPrefix(lines[3], "╭─ What would you like to do?") {
+		t.Errorf("the menu should sit one blank line under the signed-in line:\n%s", strings.Join(lines, "\n"))
 	}
 }
