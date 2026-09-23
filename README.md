@@ -28,7 +28,18 @@ GOOS=darwin GOARCH=amd64 go build -o hyperion .   # Intel Mac
 GOOS=linux  GOARCH=amd64 go build -o hyperion .   # Linux
 ```
 
+`make mac` builds both Mac binaries at once, as `hyperion-darwin-arm64` and
+`hyperion-darwin-amd64`.
+
 The result is a static binary — copy it anywhere and run it; nothing to install.
+
+On a Mac, a binary downloaded through a browser, Mail, or AirDrop is
+quarantined and Gatekeeper will refuse to run it (it isn't notarized). Either
+fetch it with `curl`, which doesn't quarantine, or clear the flag:
+
+```sh
+xattr -d com.apple.quarantine ./hyperion
+```
 
 ## Authentication
 
