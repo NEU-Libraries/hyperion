@@ -39,6 +39,14 @@ func testApp() app {
 	return app{sess: sess, stack: []screen{newMenuScreen(sess)}}
 }
 
+// pidPrompt opens "Inspect an object by PID", second on the menu after
+// Search.
+func pidPrompt(t *testing.T, a app) app {
+	t.Helper()
+	a, _ = sendApp(a, tea.KeyMsg{Type: tea.KeyDown})
+	return navigate(t, a, enter)
+}
+
 func sendApp(a app, msg tea.Msg) (app, tea.Cmd) {
 	next, cmd := a.Update(msg)
 	return next.(app), cmd
@@ -130,7 +138,8 @@ func TestAppNavigation(t *testing.T) {
 	}
 
 	a, _ = sendApp(a, tea.KeyMsg{Type: tea.KeyDown})
-	a = navigate(t, a, enter) // open export from the menu
+	a, _ = sendApp(a, tea.KeyMsg{Type: tea.KeyDown})
+	a = navigate(t, a, enter) // open export, third on the menu
 	if _, ok := a.top().(exportScreen); !ok || len(a.stack) != 2 {
 		t.Fatalf("after enter: top = %T depth = %d, want exportScreen at depth 2", a.top(), len(a.stack))
 	}
@@ -287,7 +296,7 @@ func TestProgressTally(t *testing.T) {
 
 func TestInspectFlow(t *testing.T) {
 	a := testApp()
-	a = navigate(t, a, enter) // "Inspect an object by PID" is first
+	a = pidPrompt(t, a)
 	if _, ok := a.top().(pidPromptScreen); !ok {
 		t.Fatalf("after enter: top = %T, want pidPromptScreen", a.top())
 	}

@@ -19,6 +19,7 @@ type menuScreen struct {
 
 func newMenuScreen(sess *session) menuScreen {
 	return menuScreen{sess: sess, items: []menuItem{
+		{label: "Search the catalog", open: func(s *session) screen { return newSearchPromptScreen(s) }},
 		{label: "Inspect an object by PID", open: func(s *session) screen { return newPIDPromptScreen(s) }},
 		{label: "Export MODS from a Collection or Set", open: func(s *session) screen { return newExportScreen(s) }},
 	}}

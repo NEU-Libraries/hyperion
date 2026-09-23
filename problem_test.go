@@ -126,7 +126,7 @@ func TestProblemDetailsKey(t *testing.T) {
 
 func TestTrail(t *testing.T) {
 	a := testApp()
-	a = navigate(t, a, enter) // Inspect
+	a = pidPrompt(t, a) // Inspect
 	a, _ = sendApp(a, typed("w1"))
 	a = navigate(t, a, enter) // PID w1, loading
 	if got := a.trail(); !strings.Contains(got, "Inspect") || !strings.Contains(got, "PID w1") {

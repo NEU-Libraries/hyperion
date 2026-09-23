@@ -35,7 +35,9 @@ type listScreen struct {
 	title string
 	about string
 	empty string
-	load  func(context.Context, *atlas.Client) ([]listItem, error)
+	// load reads the rows, and the about line if only the answer can say it
+	// ("100 of 312 matches"); "" keeps the one the screen was built with.
+	load func(context.Context, *atlas.Client) ([]listItem, string, error)
 
 	rawPath, rawName string // the Atlas route r shows raw ("" = none)
 	rawTitle         string // what the raw response is ("" = the list's title)
@@ -54,6 +56,7 @@ type (
 	listMsg struct {
 		id    int64
 		items []listItem
+		about string
 		err   error
 	}
 	lookupMsg struct {
@@ -65,6 +68,15 @@ type (
 )
 
 func newListScreen(sess *session, title, about, empty string, load func(context.Context, *atlas.Client) ([]listItem, error)) listScreen {
+	return newCountedListScreen(sess, title, about, empty, func(ctx context.Context, c *atlas.Client) ([]listItem, string, error) {
+		items, err := load(ctx, c)
+		return items, "", err
+	})
+}
+
+// newCountedListScreen is a list whose about line comes with its rows, for a
+// list that shows only part of what matched.
+func newCountedListScreen(sess *session, title, about, empty string, load func(context.Context, *atlas.Client) ([]listItem, string, error)) listScreen {
 	return listScreen{
 		sess: sess, id: nextScreenID(), title: title, about: about, empty: empty, load: load,
 		spinner: newSpinner(), requested: map[int]bool{},
@@ -81,8 +93,8 @@ func staticList(sess *session, title, about, empty string, items []listItem) lis
 func (s listScreen) Init() tea.Cmd {
 	id, client, load := s.id, s.sess.client, s.load
 	return tea.Batch(s.spinner.Tick, func() tea.Msg {
-		items, err := load(context.Background(), client)
-		return listMsg{id: id, items: items, err: err}
+		items, about, err := load(context.Background(), client)
+		return listMsg{id: id, items: items, about: about, err: err}
 	})
 }
 
@@ -102,6 +114,9 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return s, nil
 		}
 		s.items = msg.items
+		if msg.about != "" {
+			s.about = msg.about
+		}
 		s.state = loaded
 		return s, s.lookups()
 	case lookupMsg:

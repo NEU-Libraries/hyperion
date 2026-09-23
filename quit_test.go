@@ -61,7 +61,7 @@ func TestQuitFromAnyScreenAsksFirst(t *testing.T) {
 
 func TestQIsALetterWhileTyping(t *testing.T) {
 	a := testApp()
-	a = navigate(t, a, enter) // the PID prompt
+	a = pidPrompt(t, a) // the PID prompt
 	if !strings.Contains(ansi.Strip(a.View()), "ctrl+c to quit") {
 		t.Errorf("while typing, the header should point at ctrl+c:\n%s", ansi.Strip(a.View()))
 	}
@@ -115,7 +115,7 @@ func TestTheKeyRowEndsWithHowToQuit(t *testing.T) {
 	if row := keyRow(deepApp(t)); !strings.HasSuffix(row, "esc to go back · h to go home · q to quit") {
 		t.Errorf("MODS key row = %q", row)
 	}
-	prompt := navigate(t, testApp(), enter)
+	prompt := pidPrompt(t, testApp())
 	if row := keyRow(prompt); row != "enter to inspect · esc to go back · ctrl+c to quit" {
 		t.Errorf("while typing, the key row = %q", row)
 	}
@@ -126,7 +126,7 @@ func TestTheKeyRowEndsWithHowToQuit(t *testing.T) {
 
 	// A screen still loading has no key row of its own; the hint stands alone.
 	loading := testApp()
-	loading = navigate(t, loading, enter)
+	loading = pidPrompt(t, loading)
 	loading, _ = sendApp(loading, typed("w1"))
 	loading = navigate(t, loading, enter)
 	if row := keyRow(loading); row != "h to go home · q to quit" {
@@ -171,7 +171,7 @@ func TestHGoesHomeFromAnyScreen(t *testing.T) {
 }
 
 func TestHIsALetterWhileTyping(t *testing.T) {
-	a := navigate(t, testApp(), enter) // the PID prompt
+	a := pidPrompt(t, testApp()) // the PID prompt
 	a, _ = sendApp(a, typed("h"))
 	if len(a.stack) != 2 || a.top().(pidPromptScreen).input.Value() != "h" {
 		t.Error("h in the PID prompt should type an h")

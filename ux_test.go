@@ -166,7 +166,7 @@ func workOverview(t *testing.T, width, height int, role string, groups ...string
 	a := testApp()
 	a.sess.width, a.sess.height = width, height
 	a.sess.user.Role, a.sess.user.Groups = role, groups
-	a = navigate(t, a, enter)
+	a = pidPrompt(t, a)
 	a, _ = sendApp(a, typed("w1"))
 	a = navigate(t, a, enter)
 	obj := a.top().(objectScreen)
