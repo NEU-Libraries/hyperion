@@ -112,7 +112,7 @@ func TestTheKeyRowEndsWithHowToQuit(t *testing.T) {
 	if strings.Contains(strings.Split(ansi.Strip(menu.View()), "\n")[0], "quit") {
 		t.Error("the header should no longer carry the quit hint")
 	}
-	if row := keyRow(deepApp(t)); !strings.HasSuffix(row, "esc to go back · q to quit") {
+	if row := keyRow(deepApp(t)); !strings.HasSuffix(row, "esc to go back · h to go home · q to quit") {
 		t.Errorf("MODS key row = %q", row)
 	}
 	prompt := navigate(t, testApp(), enter)
@@ -129,7 +129,7 @@ func TestTheKeyRowEndsWithHowToQuit(t *testing.T) {
 	loading = navigate(t, loading, enter)
 	loading, _ = sendApp(loading, typed("w1"))
 	loading = navigate(t, loading, enter)
-	if row := keyRow(loading); row != "q to quit" {
+	if row := keyRow(loading); row != "h to go home · q to quit" {
 		t.Errorf("a loading screen's key row = %q", row)
 	}
 }
@@ -148,7 +148,50 @@ func TestALongKeyRowCompactsRatherThanLoseTheQuitHint(t *testing.T) {
 	}
 	a.sess.width = 120
 	a, _ = sendApp(a, tea.WindowSizeMsg{Width: 120, Height: 30})
-	if row := keyRow(a); !strings.HasSuffix(row, "esc to go back · q to quit") {
+	if row := keyRow(a); !strings.HasSuffix(row, "esc to go back · h to go home · q to quit") {
 		t.Errorf("with room, the full wording should stay: %q", row)
+	}
+}
+
+func TestHGoesHomeFromAnyScreen(t *testing.T) {
+	a := deepApp(t)
+	home, _ := sendApp(a, typed("h"))
+	if len(home.stack) != 1 {
+		t.Fatalf("h should leave only the menu, not %d screens", len(home.stack))
+	}
+	if _, ok := home.top().(menuScreen); !ok {
+		t.Fatalf("h should land on the menu, not %T", home.top())
+	}
+	if row := keyRow(home); row != "↑/↓ to move · enter to select · q to quit" {
+		t.Errorf("the menu shouldn't offer h, being home already: %q", row)
+	}
+	if again, _ := sendApp(home, typed("h")); len(again.stack) != 1 {
+		t.Error("h on the menu should do nothing")
+	}
+}
+
+func TestHIsALetterWhileTyping(t *testing.T) {
+	a := navigate(t, testApp(), enter) // the PID prompt
+	a, _ = sendApp(a, typed("h"))
+	if len(a.stack) != 2 || a.top().(pidPromptScreen).input.Value() != "h" {
+		t.Error("h in the PID prompt should type an h")
+	}
+}
+
+func TestHWaitsForARunningExport(t *testing.T) {
+	a := testApp()
+	s := newExportScreen(a.sess)
+	s.state, s.total, s.completed, s.outDir = exportDownloading, 10, 3, "./z612nb3-mods"
+	a.stack = append(a.stack, s)
+	if a, _ = sendApp(a, typed("h")); len(a.stack) != 2 {
+		t.Error("h shouldn't leave an export that is still running")
+	}
+	if strings.Contains(keyRow(a), "home") {
+		t.Errorf("a running export shouldn't offer h: %q", keyRow(a))
+	}
+	s.state = exportDone
+	a.stack[1] = s
+	if a, _ = sendApp(a, typed("h")); len(a.stack) != 1 {
+		t.Error("h should go home once the export is done")
 	}
 }

@@ -154,6 +154,10 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.quitting = true
 			return a, nil
 		}
+		if msg.String() == "h" && a.canGoHome() {
+			a.stack = a.stack[:a.home()+1]
+			return a.reveal()
+		}
 	case tea.WindowSizeMsg:
 		a.sess.width, a.sess.height = msg.Width, msg.Height
 	case pushMsg:
@@ -167,19 +171,50 @@ func (a app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 		a.stack = a.below()
-		// The revealed screen missed any resize (and wrap toggle) while it was
-		// covered; hand it the current size so it lays itself out again.
-		if a.sess.width > 0 {
-			s, cmd := a.top().Update(tea.WindowSizeMsg{Width: a.sess.width, Height: a.sess.height})
-			a.stack = append(a.below(), s)
-			return a, cmd
-		}
-		return a, nil
+		return a.reveal()
 	}
 
 	s, cmd := a.top().Update(msg)
 	a.stack = append(a.below(), s)
 	return a, cmd
+}
+
+// reveal settles the screen a pop uncovered. It missed any resize (and wrap
+// toggle) while it was covered; hand it the current size so it lays itself
+// out again.
+func (a app) reveal() (tea.Model, tea.Cmd) {
+	if a.sess.width > 0 {
+		s, cmd := a.top().Update(tea.WindowSizeMsg{Width: a.sess.width, Height: a.sess.height})
+		a.stack = append(a.below(), s)
+		return a, cmd
+	}
+	return a, nil
+}
+
+// home is where the main menu sits in the stack, or -1 before sign-in.
+func (a app) home() int {
+	for i, s := range a.stack {
+		if _, ok := s.(menuScreen); ok {
+			return i
+		}
+	}
+	return -1
+}
+
+// canGoHome reports whether h goes back to the main menu: from any screen
+// above it that isn't taking text, unless a screen on the way has work under
+// way (an export) that leaving would cut short.
+func (a app) canGoHome() bool {
+	i := a.home()
+	if i < 0 || i == len(a.stack)-1 || typing(a.top()) {
+		return false
+	}
+	for _, s := range a.stack[i+1:] {
+		if w, ok := s.(quitWarner); ok && w.quitWarning() != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // headerLines is how many lines the app header takes above every screen once
@@ -190,8 +225,11 @@ const headerLines = 5
 func (a app) View() string {
 	var b strings.Builder
 	quitKey := "q to quit"
-	if typing(a.top()) {
+	switch {
+	case typing(a.top()):
 		quitKey = "ctrl+c to quit"
+	case a.canGoHome():
+		quitKey = "h to go home · q to quit"
 	}
 	b.WriteString(titleStyle.Render("HYPERION") + dimStyle.Render("  inspect DRS objects · export MODS") + "\n")
 	if a.sess.user.NUID != "" {
@@ -217,10 +255,11 @@ func (a app) View() string {
 }
 
 // withQuitHint ends a screen's key row — its last line — with the way to
-// quit, so it sits with every other key, unless that row already says how to
+// quit (and, off the menu, the way home), so it sits with every other key, unless that row already says how to
 // quit (the menu, sign-in). A screen with no key row, such as a spinner in its
 // frame, gets the hint on a line of its own. A row too long for width (0 =
-// unknown) switches to its compact wording, so the hint isn't cut off the end.
+// unknown) switches to its compact wording, so the hint isn't cut off the end;
+// if even that is too long, the home hint gives way to the quit hint.
 func withQuitHint(view, quitKey string, width int) string {
 	lines := strings.Split(view, "\n")
 	last := strings.TrimSpace(ansi.Strip(lines[len(lines)-1]))
@@ -234,6 +273,9 @@ func withQuitHint(view, quitKey string, width int) string {
 	if width > 0 && lipgloss.Width(row) > width {
 		row = compactKeys.Replace(row)
 	}
+	if width > 0 && lipgloss.Width(row) > width { // still too long: h still works, unlisted
+		row = strings.Replace(row, " · h home", "", 1)
+	}
 	lines[len(lines)-1] = row
 	return strings.Join(lines, "\n")
 }
@@ -242,7 +284,7 @@ func withQuitHint(view, quitKey string, width int) string {
 var compactKeys = strings.NewReplacer(
 	"esc to go back", "esc back", "↑/↓ to scroll", "↑/↓ scroll", "↑/↓ to move", "↑/↓ move",
 	"enter to open", "enter open", "enter to select", "enter select", "enter to continue", "enter next",
-	"enter to inspect", "enter inspect", "ctrl+c to quit", "ctrl+c quit", "q to quit", "q quit",
+	"enter to inspect", "enter inspect", "ctrl+c to quit", "ctrl+c quit", "h to go home", "h home", "q to quit", "q quit",
 	"pgdn/pgup to page", "pgdn/pgup page",
 )
 

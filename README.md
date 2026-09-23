@@ -62,10 +62,12 @@ It then shows who you're signed in as and opens the main menu. **Export MODS**
 asks whether you want a Collection or a Set, takes the **PID** and a folder,
 says how many MODS files it will save — and how many already in the folder it
 would replace — and downloads with a live progress bar. `esc` steps back a
-screen (going back from an export error keeps what you entered). `q` quits from
+screen (going back from an export error keeps what you entered), and `h` goes
+straight back to the main menu from any screen — except while an export is
+running, which it would cut short. `q` quits from
 any screen, after asking — `y` to quit, `n` or `esc` to stay; if an export is
 running, the question says how far it got. Where you're typing (a PID, a
-folder, a file name, the sign-in), `q` is just a letter; `ctrl+c` quits at
+folder, a file name, the sign-in), `q` and `h` are just letters; `ctrl+c` quits at
 once from anywhere, and the last item on every screen's key row shows which
 applies.
 
