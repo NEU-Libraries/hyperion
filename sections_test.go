@@ -9,6 +9,9 @@ import (
 	"hyperion/internal/atlas"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 // initResult runs a screen's Init batch — its spinner tick and its load — and
@@ -106,6 +109,48 @@ func TestFileSetFromWorkCarriesItsFiles(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Errorf("files view missing %q:\n%s", want, v)
 		}
+	}
+}
+
+func TestAncestorsLabelStructuralContainers(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	sess := testSession()
+	sess.width = 100
+	obj := atlas.Object{Type: atlas.TypeWork, NOID: "j0zpdz2", Ancestors: []atlas.Ancestor{
+		{NOID: "9zw3s2q", Klass: "Community", Title: "People", SystemContainer: true},
+		{NOID: "mcvdq58", Klass: "Collection", Title: "Personal Root", PersonalRoot: true},
+		{NOID: "cvdndqc", Klass: "Collection", Title: "Coastal Research"},
+	}}
+	s := ancestorsSection(sess, obj).(listScreen)
+	s, _ = sendList(s, initResult[listMsg](t, s.Init()))
+
+	if row := s.row(s.items[0], true); !strings.HasPrefix(row, dimStyle.Render("› People")) {
+		t.Errorf("system container row should be dimmed, got %q", row)
+	}
+	v := ansi.Strip(s.View())
+	for _, want := range []string{"People  Community · 9zw3s2q · system container",
+		"Personal Root  Collection · mcvdq58 · personal root", "Coastal Research  Collection · cvdndqc"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("ancestors view missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "cvdndqc ·") {
+		t.Errorf("an ordinary ancestor should carry no label:\n%s", v)
+	}
+
+	if _, cmd := sendList(s, enter); cmd != nil {
+		t.Error("enter on the system container should do nothing")
+	}
+	s, _ = sendList(s, tea.KeyMsg{Type: tea.KeyDown})
+	_, cmd := sendList(s, enter)
+	if cmd == nil {
+		t.Fatal("enter on the personal root should open it")
+	}
+	if o, ok := cmd().(pushMsg).s.(objectScreen); !ok || o.pid != "mcvdq58" {
+		t.Errorf("enter on the personal root pushed %T", cmd().(pushMsg).s)
 	}
 }
 

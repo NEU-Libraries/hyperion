@@ -247,6 +247,9 @@ func TestRecordValuesReadAsWords(t *testing.T) {
 		{"ancestors", `[{"noid":"c0","klass":"Community","title":"Library"},{"noid":"k1","klass":"Collection","title":"Maps"}]`,
 			"Library (c0) › Maps (k1)"},
 		{"ancestors", `[]`, "none"},
+		{"ancestors", `[{"noid":"9zw3s2q","klass":"Community","title":"People","system_container":true,"personal_root":false},` +
+			`{"noid":"mcvdq58","klass":"Collection","title":"Personal Root","system_container":false,"personal_root":true}]`,
+			"People (9zw3s2q, system container) › Personal Root (mcvdq58, personal root)"},
 		{"file_identifiers", `[{"id":"ocfl://a/v1/x.mp3"},{"id":"ocfl://a/v2/x.mp3"}]`, "ocfl://a/v1/x.mp3, ocfl://a/v2/x.mp3"},
 		{"tombstoned_at", `"2026-09-15T20:14:55+00:00"`, "15 Sep 2026, 4:14 pm EDT"},
 		{"created_at", `"2026-09-22T21:17:49Z"`, "22 Sep 2026, 5:17 pm EDT"},

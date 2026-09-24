@@ -492,7 +492,8 @@ func fieldValue(key string, raw json.RawMessage, width int) string {
 	return truncate(buf.String(), width)
 }
 
-// breadcrumb renders the ancestor chain root-first: "Title (pid) › …".
+// breadcrumb renders the ancestor chain root-first: "Title (pid) › …", with
+// a structural container labelled "Title (pid, system container)".
 func breadcrumb(ancestors []atlas.Ancestor) string {
 	parts := make([]string, len(ancestors))
 	for i, a := range ancestors {
@@ -500,9 +501,25 @@ func breadcrumb(ancestors []atlas.Ancestor) string {
 		if strings.TrimSpace(t) == "" {
 			t = "(untitled " + strings.ToLower(a.Klass) + ")"
 		}
-		parts[i] = fmt.Sprintf("%s (%s)", t, a.NOID)
+		ref := a.NOID
+		if label := structuralLabel(a); label != "" {
+			ref += ", " + label
+		}
+		parts[i] = fmt.Sprintf("%s (%s)", t, ref)
 	}
 	return strings.Join(parts, " › ")
+}
+
+// structuralLabel names what a structural ancestor is ("" for content), so
+// the Ancestors list and the breadcrumb agree.
+func structuralLabel(a atlas.Ancestor) string {
+	switch {
+	case a.SystemContainer:
+		return "system container"
+	case a.PersonalRoot:
+		return "personal root"
+	}
+	return ""
 }
 
 func humanBytes(n float64) string {

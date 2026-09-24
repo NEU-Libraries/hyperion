@@ -25,7 +25,10 @@ type listItem struct {
 	// when it first scrolls into view, so a long list costs requests only for
 	// the rows a user actually looks at.
 	lookup bool
-	open   func(*session) screen
+	// inert marks a row that can't be opened (a system container): it renders
+	// dimmed and enter ignores it.
+	inert bool
+	open  func(*session) screen
 }
 
 // listScreen shows a loaded list of objects to move through and open.
@@ -187,6 +190,7 @@ func (s listScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		}
 		it := s.items[s.cursor]
 		switch {
+		case it.inert:
 		case it.open != nil:
 			return s, push(it.open(s.sess))
 		case it.pid != "":
@@ -294,6 +298,9 @@ func (s listScreen) row(it listItem, selected bool) string {
 	prefix, style := "  ", lipgloss.NewStyle()
 	if selected {
 		prefix, style = "› ", selStyle
+	}
+	if it.inert {
+		style = dimStyle
 	}
 	out := style.Render(prefix + truncate(name, avail(2)))
 	used := lipgloss.Width(out)

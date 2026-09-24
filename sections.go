@@ -292,7 +292,8 @@ func fileVersionsSection(sess *session, obj atlas.Object) screen {
 func ancestorsSection(sess *session, obj atlas.Object) screen {
 	items := make([]listItem, len(obj.Ancestors))
 	for i, a := range obj.Ancestors {
-		items[i] = listItem{pid: a.NOID, title: a.Title, kind: a.Klass}
+		items[i] = listItem{pid: a.NOID, title: a.Title, kind: a.Klass, note: structuralLabel(a),
+			inert: a.SystemContainer}
 	}
 	return staticList(sess, "Ancestors", objectContext(obj)+" · root first", "", items).withRecord(obj)
 }

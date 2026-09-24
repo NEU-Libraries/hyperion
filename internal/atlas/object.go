@@ -37,11 +37,16 @@ var typeByRoute = map[string]Type{
 	"compilations": TypeSet,
 }
 
-// Ancestor is one step of an object's ancestor chain (root-first).
+// Ancestor is one step of an object's ancestor chain (root-first). The flags
+// mark the structural containers Atlas provisions: the People Community
+// (system_container), which only full admins can read, and a Person's
+// personal root Collection (personal_root).
 type Ancestor struct {
-	NOID  string `json:"noid"`
-	Klass string `json:"klass"`
-	Title string `json:"title"`
+	NOID            string `json:"noid"`
+	Klass           string `json:"klass"`
+	Title           string `json:"title"`
+	SystemContainer bool   `json:"system_container"`
+	PersonalRoot    bool   `json:"personal_root"`
 }
 
 // Field is one key of an object's record, in the order Atlas sent it. Value is
