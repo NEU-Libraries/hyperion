@@ -16,6 +16,10 @@ var (
 	ErrForbidden    = errors.New("not readable with this token")
 	ErrNotFound     = errors.New("not found")
 	ErrGone         = errors.New("tombstoned")
+	// ErrNotIndexed is a 404 from a Solr debugging route for an object that
+	// exists but that Solr holds no document for: an indexing fault, which a
+	// reindex fixes.
+	ErrNotIndexed = errors.New("not in the search index")
 	// ErrBadResponse wraps an answer hyperion could not make sense of: a body
 	// that doesn't parse, or a redirect to somewhere unexpected.
 	ErrBadResponse = errors.New("unexpected response from Atlas")
@@ -60,6 +64,12 @@ func statusError(path string, status int, body []byte) error {
 	case http.StatusForbidden:
 		return ErrForbidden
 	case http.StatusNotFound:
+		var said struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &said) == nil && said.Error == "not_indexed" {
+			return ErrNotIndexed
+		}
 		return ErrNotFound
 	case http.StatusGone:
 		return ErrGone

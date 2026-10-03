@@ -16,6 +16,7 @@ import (
 func esc(id string) string { return url.PathEscape(id) }
 
 func PathMODS(id string) string           { return "/resources/" + esc(id) + "/mods.xml" }
+func PathMODSJSON(id string) string       { return "/resources/" + esc(id) + "/mods" }
 func PathMODSVersions(id string) string   { return "/resources/" + esc(id) + "/mods/versions" }
 func PathMODSVersion(id, v string) string { return PathMODSVersions(id) + "/" + esc(v) }
 func PathPermissions(id string) string    { return "/resources/" + esc(id) + "/permissions" }

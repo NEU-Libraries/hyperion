@@ -51,10 +51,18 @@ type User struct {
 const AdminGroup = "northeastern:drs:repository:admin"
 
 // ReadsMODSHistory reports whether Atlas lets the user list an object's MODS
-// versions: a full admin, or a delegated admin, the privileged role in the
-// admin group. Atlas gates the list on :read_versions, as it does File
-// versions, because it names who made each edit.
-func (u User) ReadsMODSHistory() bool {
+// versions. Atlas gates the list on :read_versions, as it does File versions,
+// because it names who made each edit.
+func (u User) ReadsMODSHistory() bool { return u.adminOrDelegate() }
+
+// ReadsIndex reports whether Atlas lets the user read an object's Solr
+// document and search explanation, which it gates on :read_index. Atlas also
+// checks that the user can read the object.
+func (u User) ReadsIndex() bool { return u.adminOrDelegate() }
+
+// adminOrDelegate is a full admin, or a delegated admin: the privileged role
+// in the admin group.
+func (u User) adminOrDelegate() bool {
 	if u.Role == "admin" {
 		return true
 	}
