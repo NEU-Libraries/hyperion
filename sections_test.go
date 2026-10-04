@@ -49,10 +49,10 @@ func TestSectionsForEachType(t *testing.T) {
 	}{
 		{atlas.Object{Type: atlas.TypeWork, Ancestors: anc},
 			"Record, MODS, MODS JSON, MODS history, METS, FileSets, Downloadable files, Linked collections, Associations, Ancestors, " +
-				"Solr document, Permissions"},
+				"Solr document, Search debug, Permissions"},
 		{atlas.Object{Type: atlas.TypeCollection, Ancestors: anc},
-			"Record, MODS, MODS JSON, MODS history, Children, Ancestors, Solr document, Permissions"},
-		{atlas.Object{Type: atlas.TypeCommunity}, "Record, MODS, MODS JSON, MODS history, Children, Solr document, Permissions"},
+			"Record, MODS, MODS JSON, MODS history, Children, Ancestors, Solr document, Search debug, Permissions"},
+		{atlas.Object{Type: atlas.TypeCommunity}, "Record, MODS, MODS JSON, MODS history, Children, Solr document, Search debug, Permissions"},
 		{atlas.Object{Type: atlas.TypeSet, Fields: []atlas.Field{{Key: "included_works", Value: []byte(`["w1"]`)}}},
 			"Record, Contents, Set definition"},
 		{atlas.Object{Type: atlas.TypeFileSet}, "Record, METS, Solr document, Permissions"},

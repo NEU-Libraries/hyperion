@@ -62,6 +62,9 @@ func sectionsFor(obj atlas.Object, extra []section) []section {
 	if slices.Contains(atlas.IndexedTypes, obj.Type) {
 		search = append(search, section{label: "Solr document", open: solrSection})
 	}
+	if slices.Contains(atlas.ExplainedTypes, obj.Type) {
+		search = append(search, section{label: "Search debug", open: searchDebugSection})
+	}
 
 	ss := []section{{label: "Record", open: recordSection}}
 	for _, g := range []struct {
