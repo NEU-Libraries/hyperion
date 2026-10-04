@@ -27,6 +27,7 @@ type getSection struct {
 type getOptions struct {
 	at   string // mods: a retained version label
 	page int    // contents: which page
+	q    string // search-debug: the words
 }
 
 var (
@@ -46,6 +47,8 @@ var getSections = []getSection{
 		}
 		return atlas.PathMODS(pid)
 	}},
+	{"mods-json", "MODS as JSON", false, "MODS", descriptive,
+		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathMODSJSON(pid) }},
 	{"mods-history", "the retained MODS versions (admins and delegated admins)", false, "MODS history", descriptive,
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathMODSVersions(pid) }},
 	{"mets", "METS, for a Work or FileSet", true, "METS", []atlas.Type{atlas.TypeWork, atlas.TypeFileSet},
@@ -68,6 +71,10 @@ var getSections = []getSection{
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathFileAncestry(pid) }},
 	{"versions", "a File's retained versions", false, "versions", files,
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathFileVersions(pid) }},
+	{"solr", "the Solr document (admins and delegated admins)", false, "Solr document", atlas.IndexedTypes,
+		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathSolr(pid) }},
+	{"search-debug", "how search scores it for --q WORDS (admins and delegated admins)", false, "search explanation",
+		atlas.ExplainedTypes, func(_ atlas.Type, pid string, o getOptions) string { return atlas.PathSearchExplanation(pid, o.q) }},
 }
 
 // appliesTo reports whether the section exists for objects of type t.
@@ -108,6 +115,7 @@ func (c cli) get(args []string) int {
 	fs.StringVar(&urlFlag, "url", "", "Atlas base URL (default $ATLAS_URL)")
 	fs.StringVar(&o.at, "at", "", "with mods: a retained version, e.g. v3")
 	fs.IntVar(&o.page, "page", 1, "with contents: which page")
+	fs.StringVar(&o.q, "q", "", "with search-debug: the words to explain")
 
 	positional, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -131,6 +139,14 @@ func (c cli) get(args []string) int {
 	}
 	if o.at != "" && sec.name != "mods" {
 		fmt.Fprintln(c.stderr, "hyperion get: --at goes with the mods section")
+		return exitUsage
+	}
+	if strings.TrimSpace(o.q) != "" && sec.name != "search-debug" {
+		fmt.Fprintln(c.stderr, "hyperion get: --q goes with the search-debug section")
+		return exitUsage
+	}
+	if sec.name == "search-debug" && strings.TrimSpace(o.q) == "" {
+		fmt.Fprintln(c.stderr, "hyperion get: search-debug needs the words to explain, with --q")
 		return exitUsage
 	}
 	if o.page < 1 {
@@ -169,6 +185,15 @@ func (c cli) get(args []string) int {
 		}
 		if errors.Is(err, atlas.ErrForbidden) && sec.name == "mods-history" {
 			fmt.Fprintln(c.stderr, "hyperion:", modsHistoryLimit)
+			return exitFailed
+		}
+		if errors.Is(err, atlas.ErrForbidden) && (sec.name == "solr" || sec.name == "search-debug") {
+			fmt.Fprintln(c.stderr, "hyperion:", indexLimit)
+			return exitFailed
+		}
+		if errors.Is(err, atlas.ErrNotIndexed) {
+			fmt.Fprintf(c.stderr, "hyperion: PID %s: Solr holds no document for it, so it can't appear in search. "+
+				"Reindexing it in Atlas fixes this.\n", pid)
 			return exitFailed
 		}
 		p := explain(fmt.Sprintf("Couldn't get %s for PID %s.", sec.name, pid), err)
@@ -272,12 +297,14 @@ Sections:
 Flags:
   --at VERSION   with mods: the MODS as of a retained version, e.g. v3
   --page N       with contents: which page (default 1)
+  --q WORDS      with search-debug: the words to explain
   --url URL      Atlas base URL (default $ATLAS_URL)
 
 Examples:
   hyperion get p5hqf0q | jq .work.title
   hyperion get p5hqf0q mods > p5hqf0q.xml
   hyperion get z612nb3 children | jq -r '.[]'
+  hyperion get p5hqf0q search-debug --q "harbor maps" | jq .matched
 
 Exit status: 0 success, 1 failure, 2 usage, 3 no such PID.
 `)

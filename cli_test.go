@@ -44,6 +44,17 @@ func fakeAtlasCLI(t *testing.T) *httptest.Server {
 			w.Write([]byte(`["w1"]`))
 		case "/resources/w1/mods.xml":
 			w.Write([]byte(workMODS))
+		case "/resources/w1/mods":
+			w.Write([]byte(`{"title":"Harbor"}`))
+		case "/resources/w1/solr":
+			w.Write([]byte(`{"noid":"w1","document":{"id":"u1"}}`))
+		case "/resources/k1/solr":
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":"not_indexed"}`))
+		case "/resources/w1/search_explanation?q=harbor+maps":
+			w.Write([]byte(`{"noid":"w1","matched":true}`))
+		case "/resources/k1/search_explanation?q=secret":
+			w.WriteHeader(http.StatusForbidden)
 		case "/resources/w1/mods/versions/v2":
 			w.Write([]byte("<mods>v2</mods>\n"))
 		case "/resources/search?page=1&per_page=100&q=boston+harbor":
@@ -86,6 +97,9 @@ func TestGetPrintsRawResponses(t *testing.T) {
 		{[]string{"get", "w1", "mods", "--at", "v2"}, "<mods>v2</mods>\n"},
 		{[]string{"get", "--at", "v2", "w1", "mods"}, "<mods>v2</mods>\n"},
 		{[]string{"get", "k1", "children"}, `["w1"]`},
+		{[]string{"get", "w1", "mods-json"}, `{"title":"Harbor"}`},
+		{[]string{"get", "w1", "solr"}, `{"noid":"w1","document":{"id":"u1"}}`},
+		{[]string{"get", "w1", "search-debug", "--q", "harbor maps"}, `{"noid":"w1","matched":true}`},
 	} {
 		code, out, errOut := runCLI(t, srv, false, c.args...)
 		if code != exitOK || out != c.want || errOut != "" {
@@ -123,6 +137,12 @@ func TestGetFailures(t *testing.T) {
 		{[]string{"get", "w1", "thumbnails"}, exitUsage, `no section "thumbnails"`},
 		{[]string{"get", "w1", "files", "--at", "v2"}, exitUsage, "--at goes with the mods section"},
 		{[]string{"get", "s1", "contents", "--page", "0"}, exitUsage, "--page counts from 1"},
+		{[]string{"get", "k1", "solr"}, exitFailed, "PID k1: Solr holds no document for it"},
+		{[]string{"get", "k1", "search-debug", "--q", "secret"}, exitFailed, "only available to admins and delegated admins"},
+		{[]string{"get", "s1", "search-debug", "--q", "x"}, exitUsage,
+			"PID s1 is a Set; search-debug is only for a Work, Collection or Community."},
+		{[]string{"get", "w1", "search-debug"}, exitUsage, "search-debug needs the words to explain, with --q"},
+		{[]string{"get", "w1", "solr", "--q", "x"}, exitUsage, "--q goes with the search-debug section"},
 		{[]string{"get"}, exitUsage, "Usage: hyperion get"},
 		{[]string{"get", "a", "b", "c"}, exitUsage, "Usage: hyperion get"},
 	} {
