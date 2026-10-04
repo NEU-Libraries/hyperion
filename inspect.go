@@ -113,11 +113,11 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.sections = sectionsFor(msg.obj, s.extra)
 		// Say up front what the account can't open, rather than as an error
 		// after choosing it.
-		if !s.sess.user.ReadsMODSHistory() {
-			for i := range s.sections {
-				if s.sections[i].label == "MODS history" {
-					s.sections[i].label = "MODS history (admins only)"
-				}
+		for i, sec := range s.sections {
+			switch {
+			case sec.label == "MODS history" && !s.sess.user.ReadsMODSHistory(),
+				sec.group == "Search" && !s.sess.user.ReadsIndex():
+				s.sections[i].label += " (admins only)"
 			}
 		}
 		s.state = loaded

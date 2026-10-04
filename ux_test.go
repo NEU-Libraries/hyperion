@@ -229,7 +229,7 @@ func TestShortTerminalKeepsTheHeaderAndScrollsTheMenu(t *testing.T) {
 			t.Errorf("short overview missing %q:\n%s", want, v)
 		}
 	}
-	for range 9 { // down to Permissions, the last section
+	for range 20 { // down to Permissions, the last section
 		a, _ = sendApp(a, tea.KeyMsg{Type: tea.KeyDown})
 	}
 	v = ansi.Strip(a.View())

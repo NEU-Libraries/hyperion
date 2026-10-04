@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -22,19 +23,20 @@ type section struct {
 
 // sectionsFor lists the sections that apply to an object's type, grouped the
 // same way for every type — the record, then its metadata, its content, its
-// relationships, and who may see it — so a section is always found in the
-// same place. extra carries sections the caller already has data for (a
+// relationships, how search sees it, and who may see it — so a section is
+// always found in the same place. extra carries sections the caller already has data for (a
 // FileSet opened from its Work knows its files; Atlas can't list them alone).
 func sectionsFor(obj atlas.Object, extra []section) []section {
 	var meta, content, rel []section
 	switch obj.Type {
 	case atlas.TypeWork:
-		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS history", open: modsHistorySection},
-			{label: "METS", open: metsSection}}
+		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS JSON", open: modsJSONSection},
+			{label: "MODS history", open: modsHistorySection}, {label: "METS", open: metsSection}}
 		content = []section{{label: "FileSets", open: fileSetsSection}, {label: "Downloadable files", open: filesSection}}
 		rel = []section{{label: "Linked collections", open: linkedSection}, {label: "Associations", open: associationsSection}}
 	case atlas.TypeCollection, atlas.TypeCommunity:
-		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS history", open: modsHistorySection}}
+		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS JSON", open: modsJSONSection},
+			{label: "MODS history", open: modsHistorySection}}
 		content = []section{{label: "Children", open: childrenSection}}
 	case atlas.TypeSet:
 		content = []section{{label: "Contents", open: contentsSection}}
@@ -56,11 +58,16 @@ func sectionsFor(obj atlas.Object, extra []section) []section {
 		rel = append(rel, section{label: label, open: referencedSection})
 	}
 
+	var search []section
+	if slices.Contains(atlas.IndexedTypes, obj.Type) {
+		search = append(search, section{label: "Solr document", open: solrSection})
+	}
+
 	ss := []section{{label: "Record", open: recordSection}}
 	for _, g := range []struct {
 		name string
 		ss   []section
-	}{{"Metadata", meta}, {"Content", content}, {"Relationships", rel}} {
+	}{{"Metadata", meta}, {"Content", content}, {"Relationships", rel}, {"Search", search}} {
 		for _, sec := range g.ss {
 			sec.group = g.name
 			ss = append(ss, sec)

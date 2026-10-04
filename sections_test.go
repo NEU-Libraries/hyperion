@@ -48,17 +48,18 @@ func TestSectionsForEachType(t *testing.T) {
 		want string
 	}{
 		{atlas.Object{Type: atlas.TypeWork, Ancestors: anc},
-			"Record, MODS, MODS history, METS, FileSets, Downloadable files, Linked collections, Associations, Ancestors, Permissions"},
+			"Record, MODS, MODS JSON, MODS history, METS, FileSets, Downloadable files, Linked collections, Associations, Ancestors, " +
+				"Solr document, Permissions"},
 		{atlas.Object{Type: atlas.TypeCollection, Ancestors: anc},
-			"Record, MODS, MODS history, Children, Ancestors, Permissions"},
-		{atlas.Object{Type: atlas.TypeCommunity}, "Record, MODS, MODS history, Children, Permissions"},
+			"Record, MODS, MODS JSON, MODS history, Children, Ancestors, Solr document, Permissions"},
+		{atlas.Object{Type: atlas.TypeCommunity}, "Record, MODS, MODS JSON, MODS history, Children, Solr document, Permissions"},
 		{atlas.Object{Type: atlas.TypeSet, Fields: []atlas.Field{{Key: "included_works", Value: []byte(`["w1"]`)}}},
 			"Record, Contents, Set definition"},
-		{atlas.Object{Type: atlas.TypeFileSet}, "Record, METS, Permissions"},
-		{atlas.Object{Type: atlas.TypeFile}, "Record, Versions, FileSet and Work, Permissions"},
-		{atlas.Object{Type: atlas.TypeDelegate}, "Record, Permissions"},
+		{atlas.Object{Type: atlas.TypeFileSet}, "Record, METS, Solr document, Permissions"},
+		{atlas.Object{Type: atlas.TypeFile}, "Record, Versions, FileSet and Work, Solr document, Permissions"},
+		{atlas.Object{Type: atlas.TypeDelegate}, "Record, Solr document, Permissions"},
 		{atlas.Object{Type: atlas.TypePerson, Fields: []atlas.Field{{Key: "personal_root_id", Value: []byte(`"k9"`)}}},
-			"Record, Referenced PIDs, Permissions"},
+			"Record, Referenced PIDs, Solr document, Permissions"},
 	} {
 		if got := labelsOf(sectionsFor(c.obj, nil)); got != c.want {
 			t.Errorf("%s: sections = %s\n want %s", c.obj.Type, got, c.want)
@@ -98,7 +99,7 @@ func TestFileSetFromWorkCarriesItsFiles(t *testing.T) {
 		t.Fatalf("enter should open FileSet fs1, got %T", cmd().(pushMsg).s)
 	}
 	secs := sectionsFor(atlas.Object{Type: atlas.TypeFileSet}, fso.extra)
-	if got := labelsOf(secs); got != "Record, METS, Files, Permissions" {
+	if got := labelsOf(secs); got != "Record, METS, Files, Solr document, Permissions" {
 		t.Fatalf("sections = %s", got)
 	}
 	files := secs[2].open(sess, atlas.Object{Type: atlas.TypeFileSet, NOID: "fs1"}).(listScreen)
