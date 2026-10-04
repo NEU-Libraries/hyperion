@@ -110,12 +110,14 @@ hand-built cURL calls with a bearer header. Auth comes from `ATLAS_URL` /
 ./hyperion get w1 mods > w1.xml              # current MODS
 ./hyperion get w1 mods --at v3               # MODS as of a retained version
 ./hyperion get k1 children | jq -r '.[]'     # PIDs beneath a Collection
+./hyperion get w1 search-debug --q "harbor maps" | jq .matched
 ```
 
 | Section | What it prints |
 | --- | --- |
 | `record` | the object's record (the default) |
 | `mods` | MODS XML; with `--at VERSION`, as of that version |
+| `mods-json` | MODS as JSON |
 | `mods-history` | the retained MODS versions (admins and delegated admins) |
 | `mets` | METS, for a Work or FileSet |
 | `permissions` | the access-control envelope |
@@ -124,6 +126,8 @@ hand-built cURL calls with a bearer header. Auth comes from `ATLAS_URL` /
 | `filesets`, `files` | a Work's FileSets with their files, or its downloadable files |
 | `linked`, `associations` | the Collections a Work is linked into; its associations |
 | `ancestry`, `versions` | a File's FileSet and Work; its retained versions |
+| `solr` | the Solr document (admins and delegated admins) |
+| `search-debug` | how the catalog search scores a Work, Collection or Community for `--q WORDS` (admins and delegated admins) |
 
 Flags may come before or after the PID. Output to a pipe or file is never
 altered; on a terminal, a final newline is added if the body lacks one. Errors
@@ -183,8 +187,8 @@ the same flags with no subcommand — still works.
    `/compilations/:id`.
 3. Shows the type, title, and ancestor chain, a menu of the sections that apply
    to that type, and a preview of the record. The menu is grouped the same way
-   for every type — Metadata, Content, Relationships, Access — and scrolls on
-   a short terminal. Object ids are labelled **PID** and person ids **NUID**
+   for every type — Metadata, Content, Relationships, Search, Access — and
+   scrolls on a short terminal. Object ids are labelled **PID** and person ids **NUID**
    (depositor, proxy uploader, …); timestamps show in local time.
 
 A section that simply has nothing — no METS yet, MODS history for someone who
@@ -197,7 +201,7 @@ inspects — Atlas serves its record with a 410.
 | Section | Types | Atlas route |
 | --- | --- | --- |
 | Record | all | the typed record, every field |
-| MODS, MODS history | Work, Collection, Community | `/resources/:id/mods`, `…/mods/versions` (admins and delegated admins) |
+| MODS, MODS JSON, MODS history | Work, Collection, Community | `/resources/:id/mods.xml`, `/resources/:id/mods`, `…/mods/versions` (admins and delegated admins) |
 | METS | Work, FileSet | `/works/:id/mets`, `/file_sets/:id/mets` |
 | FileSets, Downloadable files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
 | Linked collections, Associations | Work | `/works/:id/linked_members`, `/works/:id/associations` |
@@ -205,6 +209,8 @@ inspects — Atlas serves its record with a 410.
 | Contents | Set | `/compilations/:id/contents` |
 | FileSet and Work, Versions | File | `/files/:id/ancestry`, `/files/:id/versions` |
 | Ancestors; Set definition or Referenced PIDs | when present | from the record |
+| Solr document | all but Set | `/resources/:id/solr` (admins and delegated admins) |
+| Search debug | Work, Collection, Community | `/resources/:id/search_explanation` (admins and delegated admins) |
 | Permissions | all but Set | `/resources/:id/permissions` |
 
 Enter on any object in a section opens that object; `esc` comes back. Lists
@@ -226,6 +232,42 @@ the same bytes cURL would print; `r` again comes back. `s` on a raw view, MODS,
 or an Atlas error response saves it, offering `./<pid>-<section>.<ext>`. The
 file gets Atlas's bytes unchanged, and Hyperion never writes over an existing
 file.
+
+### Solr document and Search debug
+
+Both are for admins and delegated admins, and Atlas also checks that you can
+read the object. Anyone else sees "(admins only)" beside them in the menu.
+
+**Solr document** shows what Atlas wrote to Solr for the object. Atlas writes
+most properties several ways (`depositor_ssi`, `depositor_tesim`, …); where the
+variants hold the same value they share one row, named
+`depositor_{ssi,ssim,tesi,tesim,tsi,tsim}`. A long value is cut to a line and a
+long list to 8 lines; `r` shows the document whole. Fields that are searched
+but not stored, such as the stemmed titles and `descriptive_keywords_tesim`,
+never appear in a Solr document. If Solr holds no document for the object, the
+screen says so: that is an indexing fault, and reindexing the object in Atlas
+fixes it.
+
+**Search debug** answers "why does this record not come up for these words?"
+and "why does it rank where it does?". Type words, and about 300 ms after you
+stop, Hyperion asks Atlas how the catalog search scores this object for them,
+whether it matches or not. The screen shows:
+
+- whether the object matches, its score, and any catalog filter that hides it
+  anyway (a featured Collection, a tombstone);
+- for each word, the field it scored best in, or that it matched nowhere;
+- every searched field (Solr's `qf`), strongest first, with its boost and
+  points;
+- for the selected field (`↑`/`↓`), its stored text with the matched words
+  marked — as typed, or in another form, such as "Survey" for "surveys" — and
+  its index and query tokens.
+
+`enter` swaps the field detail for Solr's explanation tree and the parsed
+query; `pgdn`/`pgup` page through either. The field boosts and the minimum-match
+rule come from Solr's search handler, so the screen stays right when
+`solrconfig.xml` changes. Hyperion reads the tree the way Cerberus's "Why this
+result?" dialog does: each word scores its best field in full, plus 1% of each
+other field it matched.
 
 ### Export
 
