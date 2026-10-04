@@ -530,6 +530,7 @@ var searchFieldLabels = map[string]string{
 	"title_stem_tesim":           "Title, plurals made singular",
 	"title_kstem_tesim":          "Title, other forms of each word",
 	"title_plain_tsim":           "Title without formatting",
+	"title_split_tesim":          "Title, split into words",
 	"title_variant_tesim":        "Other titles",
 	"description_tsim":           "Description",
 	"description_stem_tesim":     "Description, plurals made singular",
