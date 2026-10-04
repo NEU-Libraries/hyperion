@@ -701,7 +701,8 @@ func markMatches(v atlas.FieldValue, typed map[string]bool) string {
 	var b strings.Builder
 	at := 0
 	for _, t := range v.Tokens {
-		if !t.Match {
+		// title_split_tesim repeats a split-off word as a zero-width token.
+		if !t.Match || t.Start >= t.End {
 			continue
 		}
 		from, to := byteRange(v.Text, t.Start, t.End)
