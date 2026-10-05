@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,7 +24,12 @@ import (
 	"hyperion/internal/export"
 )
 
-const version = "2.0.0"
+// versionFile is .version at the repo root, the one place the version lives.
+//
+//go:embed .version
+var versionFile string
+
+var version = strings.TrimSpace(versionFile)
 
 // Exit statuses. notFound lets a script ask whether a PID exists.
 const (
