@@ -171,7 +171,7 @@ func (c cli) get(args []string) int {
 	}
 	path := sec.path(typ, pid, o)
 	if body, err = client.Raw(ctx, path); err != nil {
-		return c.rawFailed(ctx, client, pid, sec, typ, err)
+		return c.rawFailed(ctx, client, pid, sec, typ, o, err)
 	}
 	return c.emit(body)
 }
@@ -199,9 +199,9 @@ var getLimits = map[string]string{
 }
 
 // rawFailed reports a section's route failing, in the terms of that section.
-func (c cli) rawFailed(ctx context.Context, client *atlas.Client, pid string, sec getSection, typ atlas.Type, err error) int {
+func (c cli) rawFailed(ctx context.Context, client *atlas.Client, pid string, sec getSection, typ atlas.Type, o getOptions, err error) int {
 	if errors.Is(err, atlas.ErrNotFound) {
-		return c.sectionNotFound(ctx, client, pid, sec, typ)
+		return c.sectionNotFound(ctx, client, pid, sec, typ, o)
 	}
 	if limit, ok := getLimits[sec.name]; ok && errors.Is(err, atlas.ErrForbidden) {
 		fmt.Fprintln(c.stderr, "hyperion:", limit)
@@ -218,9 +218,10 @@ func (c cli) rawFailed(ctx context.Context, client *atlas.Client, pid string, se
 
 // sectionNotFound tells apart the two things a 404 on a section's route can
 // mean: no object has the PID (exit 3), or the object exists and has no such
-// section — a FileSet with no METS, the ancestry of a Work — which is a
-// failure, not a missing PID. typ is the object's type if already resolved.
-func (c cli) sectionNotFound(ctx context.Context, client *atlas.Client, pid string, sec getSection, typ atlas.Type) int {
+// section — a FileSet with no METS, the ancestry of a Work, a MODS version
+// that was never kept — which is a failure, not a missing PID. typ is the
+// object's type if already resolved.
+func (c cli) sectionNotFound(ctx context.Context, client *atlas.Client, pid string, sec getSection, typ atlas.Type, o getOptions) int {
 	if typ == "" {
 		obj, err := client.Inspect(ctx, pid)
 		if err != nil {
@@ -231,6 +232,11 @@ func (c cli) sectionNotFound(ctx context.Context, client *atlas.Client, pid stri
 	if !sec.appliesTo(typ) {
 		fmt.Fprintf(c.stderr, "hyperion get: PID %s is a %s; %s is only for %s.\n", pid, typ, sec.name, typeList(sec.types))
 		return exitUsage
+	}
+	if o.at != "" {
+		fmt.Fprintf(c.stderr, "hyperion: PID %s: this %s has no MODS version %s. "+
+			"hyperion get %s mods-history lists the versions Atlas keeps.\n", pid, typ, o.at, pid)
+		return exitFailed
 	}
 	fmt.Fprintf(c.stderr, "hyperion: PID %s: this %s has no %s.\n", pid, typ, sec.noun)
 	return exitFailed

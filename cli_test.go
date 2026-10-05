@@ -136,6 +136,8 @@ func TestGetFailures(t *testing.T) {
 		{[]string{"get", "w1", "children"}, exitUsage, "PID w1 is a Work; children is only for a Collection or Community."},
 		{[]string{"get", "w1", "thumbnails"}, exitUsage, `no section "thumbnails"`},
 		{[]string{"get", "w1", "files", "--at", "v2"}, exitUsage, "--at goes with the mods section"},
+		{[]string{"get", "w1", "mods", "--at", "v9"}, exitFailed,
+			"PID w1: this Work has no MODS version v9. hyperion get w1 mods-history lists the versions Atlas keeps."},
 		{[]string{"get", "s1", "contents", "--page", "0"}, exitUsage, "--page counts from 1"},
 		{[]string{"get", "k1", "solr"}, exitFailed, "PID k1: Solr holds no document for it"},
 		{[]string{"get", "k1", "search-debug", "--q", "secret"}, exitFailed, "only available to admins and delegated admins"},
