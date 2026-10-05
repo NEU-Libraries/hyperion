@@ -100,20 +100,10 @@ func readExplanation(ex atlas.SearchExplanation) reading {
 	scored := map[string]clause{}
 	var order []string
 	for _, n := range nodes {
-		c := clause{points: n.Value}
-		for _, w := range collect(n, func(n atlas.ExplainNode) bool { return weightRe.MatchString(n.Description) }) {
-			m := weightRe.FindStringSubmatch(w.Description)
-			term := m[2]
-			if strings.HasPrefix(term, `"`) {
-				c.phrase = true
-				term = strings.Trim(strings.Split(term, `"~`)[0], `"`)
-			}
-			c.hits = append(c.hits, fieldScore{field: m[1], term: term, points: w.Value})
-		}
+		c := clauseAt(n)
 		if len(c.hits) == 0 {
 			continue
 		}
-		slices.SortStableFunc(c.hits, func(a, b fieldScore) int { return cmp.Compare(b.points, a.points) })
 		if c.phrase {
 			c.text = c.hits[0].term
 			_, again := scored[matchQuoted(c.text, quoted)]
@@ -152,33 +142,59 @@ func readExplanation(ex atlas.SearchExplanation) reading {
 		}
 	}
 
-	r.required = len(r.clauses)
-	if m := requiredRe.FindStringSubmatch(ex.ParsedQuery); m != nil {
-		r.required, _ = strconv.Atoi(m[1])
-	} else if failed := collect(ex.Explanation, func(n atlas.ExplainNode) bool {
-		return minMatchRe.MatchString(n.Description)
-	}); len(failed) > 0 {
-		r.required, _ = strconv.Atoi(minMatchRe.FindStringSubmatch(failed[0].Description)[1])
-	}
-
+	r.required = requiredClauses(ex, len(r.clauses))
 	for _, n := range collect(ex.Explanation, func(n atlas.ExplainNode) bool {
 		return strings.HasPrefix(n.Description, "if(")
 	}) {
 		r.adjust *= n.Value
 	}
-
 	for _, f := range ex.Fields {
-		fr := fieldReading{ExplainedField: f, boost: ex.Handler.QF[f.Field], scores: map[string]float64{}}
-		for _, c := range append(append([]clause{}, r.clauses...), r.bonuses...) {
-			for _, h := range c.hits {
-				if h.field == f.Field {
-					fr.scores[c.text] = max(fr.scores[c.text], h.points)
-				}
-			}
-		}
-		r.fields = append(r.fields, fr)
+		r.fields = append(r.fields, readField(f, ex.Handler.QF[f.Field], append(slices.Clone(r.clauses), r.bonuses...)))
 	}
 	return r
+}
+
+// clauseAt reads one "max plus" node: every field its weights scored in,
+// strongest first. A quoted term marks the clause a phrase.
+func clauseAt(n atlas.ExplainNode) clause {
+	c := clause{points: n.Value}
+	for _, w := range collect(n, func(n atlas.ExplainNode) bool { return weightRe.MatchString(n.Description) }) {
+		m := weightRe.FindStringSubmatch(w.Description)
+		term := m[2]
+		if strings.HasPrefix(term, `"`) {
+			c.phrase = true
+			term = strings.Trim(strings.Split(term, `"~`)[0], `"`)
+		}
+		c.hits = append(c.hits, fieldScore{field: m[1], term: term, points: w.Value})
+	}
+	slices.SortStableFunc(c.hits, func(a, b fieldScore) int { return cmp.Compare(b.points, a.points) })
+	return c
+}
+
+// requiredClauses is how many clauses must match: mm from the parsed query,
+// else from a failed minimum-match node, else all n of them.
+func requiredClauses(ex atlas.SearchExplanation, n int) int {
+	if m := requiredRe.FindStringSubmatch(ex.ParsedQuery); m != nil {
+		n, _ = strconv.Atoi(m[1])
+	} else if failed := collect(ex.Explanation, func(n atlas.ExplainNode) bool {
+		return minMatchRe.MatchString(n.Description)
+	}); len(failed) > 0 {
+		n, _ = strconv.Atoi(minMatchRe.FindStringSubmatch(failed[0].Description)[1])
+	}
+	return n
+}
+
+// readField is what each clause scored in one field, at its best.
+func readField(f atlas.ExplainedField, boost float64, clauses []clause) fieldReading {
+	fr := fieldReading{ExplainedField: f, boost: boost, scores: map[string]float64{}}
+	for _, c := range clauses {
+		for _, h := range c.hits {
+			if h.field == f.Field {
+				fr.scores[c.text] = max(fr.scores[c.text], h.points)
+			}
+		}
+	}
+	return fr
 }
 
 // collect gathers the nodes under n (n included) that want accepts.
@@ -237,10 +253,8 @@ func notWordRune(r rune) bool {
 // side, which pairs the typed word with its searched form.
 func typedForm(hits []fieldScore, fields []atlas.ExplainedField, typed []string) string {
 	for _, h := range hits {
-		for _, w := range typed {
-			if strings.EqualFold(w, h.term) {
-				return w
-			}
+		if w, ok := typedAs(h.term, typed); ok {
+			return w
 		}
 	}
 	for _, h := range hits {
@@ -250,17 +264,23 @@ func typedForm(hits []fieldScore, fields []atlas.ExplainedField, typed []string)
 				continue
 			}
 			for i, a := range q.Analysed {
-				if a == h.term {
-					for _, w := range typed {
-						if strings.EqualFold(w, q.Typed[i]) {
-							return w
-						}
-					}
+				if w, ok := typedAs(q.Typed[i], typed); ok && a == h.term {
+					return w
 				}
 			}
 		}
 	}
 	return hits[0].term
+}
+
+// typedAs is word as the words typed it, ignoring case.
+func typedAs(word string, typed []string) (string, bool) {
+	for _, w := range typed {
+		if strings.EqualFold(w, word) {
+			return w, true
+		}
+	}
+	return "", false
 }
 
 // isBonus tells the phrase boost from a quoted phrase. With nothing quoted,
