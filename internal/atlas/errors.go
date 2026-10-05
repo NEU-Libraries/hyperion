@@ -79,7 +79,7 @@ func statusError(path string, status int, body []byte) error {
 }
 
 func badResponse(path string, err error) error {
-	return fmt.Errorf("%w for GET %s: %v", ErrBadResponse, path, err)
+	return fmt.Errorf("%w for GET %s: %w", ErrBadResponse, path, err)
 }
 
 func snippet(b []byte) string {

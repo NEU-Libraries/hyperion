@@ -244,7 +244,7 @@ func TestTypingAsksAtlasOnceItPauses(t *testing.T) {
 	sess := testSession()
 	sess.width, sess.height = 140, 50
 	sess.client = atlas.New(srv.URL, "tok")
-	var s screen = searchDebugSection(sess, coastal)
+	s := searchDebugSection(sess, coastal)
 
 	typeWords := func(words string) {
 		d := s.(searchDebugScreen)

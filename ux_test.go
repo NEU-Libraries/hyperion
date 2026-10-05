@@ -18,13 +18,13 @@ import (
 
 const digest = "sha512:c6bb3b262e4b53f52daa6fdc4d4341503d69c2c6643d8224523b67e2de1f083990cf6a187fc6033ded492335c6e2fb29e13f9732bd6cef2dd1da5753057bb8cc"
 
-// appAt is an app of the given size with the screen make builds (from the
+// appAt is an app of the given size with the screen that build makes (from the
 // app's own session) pushed and loaded on top.
-func appAt(t *testing.T, width, height int, make func(*session) screen) app {
+func appAt(t *testing.T, width, height int, build func(*session) screen) app {
 	t.Helper()
 	a := testApp()
 	a.sess.width, a.sess.height = width, height
-	s := make(a.sess)
+	s := build(a.sess)
 	a, _ = sendApp(a, pushMsg{s})
 	switch s.(type) {
 	case pagerScreen:

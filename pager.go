@@ -342,7 +342,7 @@ func (s pagerScreen) footer() string {
 	}
 	// Offer only the keys that do something here: scrolling when there is
 	// more than fits, pan and wrap when a line is too wide for the view.
-	scrolls := !(s.vp.AtTop() && s.vp.AtBottom())
+	scrolls := !s.vp.AtTop() || !s.vp.AtBottom()
 	var keys []string
 	if scrolls {
 		keys = append(keys, "↑/↓ to scroll")
