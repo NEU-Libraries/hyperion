@@ -182,49 +182,53 @@ func (s pagerScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.spinner, cmd = s.spinner.Update(msg)
 		return s, cmd
 	case tea.KeyMsg:
-		if s.state == failed {
-			return s, problemKey(s.sess, s.prob, msg, pop)
-		}
-		if s.save.active {
-			var cmd tea.Cmd
-			s.save, cmd = s.save.update(msg, s.raw)
-			return s, cmd
-		}
-		s.save.notice = ""
-		switch msg.String() {
-		case "esc":
-			return s, pop
-		case "r":
-			switch {
-			case s.isRaw:
-				return s, pop
-			case s.rawPath != "":
-				return s, push(newRawPager(s.sess, firstNonEmpty(s.rawTitle, s.title), s.rawPath, s.rawName, s.rawBody))
-			}
-			return s, nil
-		case "s":
-			if s.state == loaded && s.raw != nil {
-				return s, s.save.start(s.rawName, s.raw)
-			}
-			return s, nil
-		case "home", "g":
-			s.vp.GotoTop()
-			return s, nil
-		case "end", "G":
-			s.vp.GotoBottom()
-			return s, nil
-		case "w":
-			s.sess.wrap = !s.sess.wrap
-			if s.state == loaded {
-				s.layout()
-			}
-			return s, nil
-		}
-		var cmd tea.Cmd
-		s.vp, cmd = s.vp.Update(msg)
-		return s, cmd
+		return s.handleKey(msg)
 	}
 	return s, nil
+}
+
+func (s pagerScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
+	if s.state == failed {
+		return s, problemKey(s.sess, s.prob, msg, pop)
+	}
+	if s.save.active {
+		var cmd tea.Cmd
+		s.save, cmd = s.save.update(msg, s.raw)
+		return s, cmd
+	}
+	s.save.notice = ""
+	switch msg.String() {
+	case "esc":
+		return s, pop
+	case "r":
+		switch {
+		case s.isRaw:
+			return s, pop
+		case s.rawPath != "":
+			return s, push(newRawPager(s.sess, firstNonEmpty(s.rawTitle, s.title), s.rawPath, s.rawName, s.rawBody))
+		}
+		return s, nil
+	case "s":
+		if s.state == loaded && s.raw != nil {
+			return s, s.save.start(s.rawName, s.raw)
+		}
+		return s, nil
+	case "home", "g":
+		s.vp.GotoTop()
+		return s, nil
+	case "end", "G":
+		s.vp.GotoBottom()
+		return s, nil
+	case "w":
+		s.sess.wrap = !s.sess.wrap
+		if s.state == loaded {
+			s.layout()
+		}
+		return s, nil
+	}
+	var cmd tea.Cmd
+	s.vp, cmd = s.vp.Update(msg)
+	return s, cmd
 }
 
 // layout sizes the viewport to the terminal and re-renders into it.

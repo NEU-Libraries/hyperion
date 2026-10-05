@@ -138,47 +138,10 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		return s, nil
 
 	case exportPID:
-		switch msg.Type {
-		case tea.KeyEnter:
-			v := strings.TrimSpace(s.pidInput.Value())
-			if v == "" {
-				return s, nil
-			}
-			s.pidInput.SetValue(v)
-			s.pidInput.Blur()
-			s.outInput.SetValue("./" + v + "-mods")
-			s.outInput.Focus()
-			s.outInput.CursorEnd()
-			s.state = exportOut
-			return s, textinput.Blink
-		case tea.KeyEsc:
-			s.pidInput.Blur()
-			s.state = exportType
-			return s, nil
-		}
-		var cmd tea.Cmd
-		s.pidInput, cmd = s.pidInput.Update(msg)
-		return s, cmd
+		return s.pidKey(msg)
 
 	case exportOut:
-		switch msg.Type {
-		case tea.KeyEnter:
-			s.outDir = strings.TrimSpace(s.outInput.Value())
-			if s.outDir == "" {
-				return s, nil
-			}
-			s.outInput.Blur()
-			s.state = exportResolving
-			return s, tea.Batch(s.spinner.Tick, s.resolveCmd())
-		case tea.KeyEsc:
-			s.outInput.Blur()
-			s.pidInput.Focus()
-			s.state = exportPID
-			return s, textinput.Blink
-		}
-		var cmd tea.Cmd
-		s.outInput, cmd = s.outInput.Update(msg)
-		return s, cmd
+		return s.outKey(msg)
 
 	case exportConfirm:
 		switch msg.String() {
@@ -205,6 +168,57 @@ func (s exportScreen) handleKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 		return s, problemKey(s.sess, s.prob, msg, nil)
 	}
 	return s, nil
+}
+
+// pidKey handles the PID step: enter moves on to the folder, which defaults
+// to ./<pid>-mods; esc goes back to the export type.
+func (s exportScreen) pidKey(msg tea.KeyMsg) (screen, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		v := strings.TrimSpace(s.pidInput.Value())
+		if v == "" {
+			return s, nil
+		}
+		s.pidInput.SetValue(v)
+		s.pidInput.Blur()
+		s.outInput.SetValue("./" + v + "-mods")
+		s.outInput.Focus()
+		s.outInput.CursorEnd()
+		s.state = exportOut
+		return s, textinput.Blink
+	case tea.KeyEsc:
+		s.pidInput.Blur()
+		s.state = exportType
+		return s, nil
+	}
+	var cmd tea.Cmd
+	s.pidInput, cmd = s.pidInput.Update(msg)
+	return s, cmd
+
+}
+
+// outKey handles the folder step: enter resolves the export; esc goes back
+// to the PID.
+func (s exportScreen) outKey(msg tea.KeyMsg) (screen, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		s.outDir = strings.TrimSpace(s.outInput.Value())
+		if s.outDir == "" {
+			return s, nil
+		}
+		s.outInput.Blur()
+		s.state = exportResolving
+		return s, tea.Batch(s.spinner.Tick, s.resolveCmd())
+	case tea.KeyEsc:
+		s.outInput.Blur()
+		s.pidInput.Focus()
+		s.state = exportPID
+		return s, textinput.Blink
+	}
+	var cmd tea.Cmd
+	s.outInput, cmd = s.outInput.Update(msg)
+	return s, cmd
+
 }
 
 // toPID opens the PID prompt, labelled for the chosen type.
