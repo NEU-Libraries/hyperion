@@ -293,3 +293,18 @@ other field it matched.
 ("PID" is the DRS-facing term for what Atlas stores internally as a resource
 NOID; Hyperion uses "PID" everywhere you see it, and the NOID value verbatim as
 the filename.)
+
+## Development
+
+```sh
+make tools   # once: installs the pinned golangci-lint into $(go env GOPATH)/bin
+make test    # go test ./...
+make lint    # the linters in .golangci.yml
+make fmt     # gofmt and goimports, in place
+make check   # test, then lint — what CI runs
+```
+
+`.golangci.yml` holds the limits: a function may have a cyclomatic
+complexity of 20, a cognitive complexity of 30, and 100 lines. Tests are
+exempt from those. CI (`.github/workflows/ci.yml`) runs the tests, the
+linters and `make mac` on every push to `main` and every pull request.
