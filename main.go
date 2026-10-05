@@ -3,8 +3,7 @@
 // interactive TUI; `hyperion get` prints any object's raw Atlas response,
 // `hyperion search` a page of catalog search hits, and
 // `hyperion export` (or the bare --type/--pid flags) exports headless. Auth is
-// a personal-access token in the environment (ATLAS_URL + ATLAS_JWT),
-// atlas_rb's BYO-JWT contract in Go.
+// a personal-access token in the environment (ATLAS_URL + ATLAS_JWT).
 //
 // User-facing text calls the identifiers "PIDs" (the DRS/Cerberus convention);
 // internally they are the resource NOIDs.

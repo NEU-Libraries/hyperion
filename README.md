@@ -12,14 +12,13 @@ an interactive terminal UI and a headless mode. It talks to the **Atlas API**
 directly over HTTP, authenticated with a **personal access token**, and fetches
 each member's MODS through Atlas's polymorphic `/resources/:id/mods` route.
 
-> This is the v2 of a bash script that scraped v1's `…/pids` and fanned `wget`s
-> at `/api/v1/files/neu:<pid>/mods`. (There was also a Ruby iteration used to
-> shake down the `atlas_rb` client; this Go version is the real tool.)
+> Hyperion began as a successor to a bash script that exported MODS from DRS
+> v1. It is now a tool of its own; [Coming from the bash export
+> script](#coming-from-the-bash-export-script) maps the old flags to the new.
 
 ## Install / build
 
-Grab a release binary, or build from source (Go 1.21+; the toolchain
-auto-fetches the pinned version):
+Build from source (Go 1.21+; the toolchain auto-fetches the pinned version):
 
 ```sh
 go build -o hyperion .          # this platform
@@ -279,9 +278,9 @@ other field it matched.
    in a bounded worker pool, writing `<out>/<pid>.xml`. A member that fails is
    reported and skipped, never fatal.
 
-## Mapping from the v1 script
+## Coming from the bash export script
 
-| v1 (bash) | v2 (Hyperion) |
+| bash script | Hyperion |
 | --- | --- |
 | `-t collection\|set`, `-p <pid>` | `--type`, `--pid` (or the TUI) |
 | `-a <token>` query param | `ATLAS_JWT` bearer token |
