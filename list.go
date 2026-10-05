@@ -13,6 +13,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// tombstonedWarn flags a tombstoned object wherever it is listed or shown.
+const tombstonedWarn = "tombstoned"
+
 // listItem is one row of a list screen. Enter on a row runs open if set, else
 // opens the object at pid; a row with neither is informational only.
 type listItem struct {
@@ -20,7 +23,7 @@ type listItem struct {
 	title string // shown as the row's name; the PID stands in until known
 	kind  string // object type, e.g. "Work"
 	note  string // secondary detail, dimmed
-	warn  string // flagged detail, e.g. "tombstoned"
+	warn  string // flagged detail, e.g. tombstonedWarn
 	// lookup marks a row known only by PID: its title and type are resolved
 	// when it first scrolls into view, so a long list costs requests only for
 	// the rows a user actually looks at.
@@ -135,7 +138,7 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		default:
 			it.title, it.kind = msg.obj.Title, string(msg.obj.Type)
 			if tombstoned(msg.obj) {
-				it.warn = "tombstoned"
+				it.warn = tombstonedWarn
 			}
 		}
 		return s, nil

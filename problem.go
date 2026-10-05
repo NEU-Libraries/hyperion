@@ -159,7 +159,7 @@ func briefError(err error) string {
 	case errors.Is(err, atlas.ErrNotFound):
 		return "not found"
 	case errors.Is(err, atlas.ErrGone):
-		return "tombstoned"
+		return tombstonedWarn
 	case errors.Is(err, atlas.ErrUnauthorized):
 		return "token rejected"
 	case errors.As(err, &he):

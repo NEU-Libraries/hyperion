@@ -14,11 +14,20 @@ import (
 )
 
 // section is one entry of an object's section menu; open builds its screen.
-// group heads the menu's left column where a group starts.
+// group heads the menu's left column where a group starts. allowed, when set,
+// says whether Atlas lets the user read the section; nil means anyone can.
 type section struct {
-	label string
-	group string
-	open  func(*session, atlas.Object) screen
+	label   string
+	group   string
+	open    func(*session, atlas.Object) screen
+	allowed func(atlas.User) bool
+}
+
+// modsSections are the metadata sections of every object that has MODS.
+var modsSections = []section{
+	{label: "MODS", open: modsSection},
+	{label: "MODS JSON", open: modsJSONSection},
+	{label: "MODS history", open: modsHistorySection, allowed: atlas.User.ReadsMODSHistory},
 }
 
 // sectionsFor lists the sections that apply to an object's type, grouped the
@@ -30,13 +39,11 @@ func sectionsFor(obj atlas.Object, extra []section) []section {
 	var meta, content, rel []section
 	switch obj.Type {
 	case atlas.TypeWork:
-		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS JSON", open: modsJSONSection},
-			{label: "MODS history", open: modsHistorySection}, {label: "METS", open: metsSection}}
+		meta = append(slices.Clone(modsSections), section{label: "METS", open: metsSection})
 		content = []section{{label: "FileSets", open: fileSetsSection}, {label: "Downloadable files", open: filesSection}}
 		rel = []section{{label: "Linked collections", open: linkedSection}, {label: "Associations", open: associationsSection}}
 	case atlas.TypeCollection, atlas.TypeCommunity:
-		meta = []section{{label: "MODS", open: modsSection}, {label: "MODS JSON", open: modsJSONSection},
-			{label: "MODS history", open: modsHistorySection}}
+		meta = slices.Clone(modsSections)
 		content = []section{{label: "Children", open: childrenSection}}
 	case atlas.TypeSet:
 		content = []section{{label: "Contents", open: contentsSection}}
@@ -60,10 +67,10 @@ func sectionsFor(obj atlas.Object, extra []section) []section {
 
 	var search []section
 	if slices.Contains(atlas.IndexedTypes, obj.Type) {
-		search = append(search, section{label: "Solr document", open: solrSection})
+		search = append(search, section{label: "Solr document", open: solrSection, allowed: atlas.User.ReadsIndex})
 	}
 	if slices.Contains(atlas.ExplainedTypes, obj.Type) {
-		search = append(search, section{label: "Search debug", open: searchDebugSection})
+		search = append(search, section{label: "Search debug", open: searchDebugSection, allowed: atlas.User.ReadsIndex})
 	}
 
 	ss := []section{{label: "Record", open: recordSection}}
@@ -169,7 +176,7 @@ func fileSetItems(sets []atlas.FileSetEntry) []listItem {
 		}
 		it := listItem{pid: fs.NOID, title: title, note: joinNonEmpty(position, plural(len(fs.Assets), "file"))}
 		if fs.Tombstoned {
-			it.warn = "tombstoned"
+			it.warn = tombstonedWarn
 		}
 		it.open = func(sess *session) screen {
 			return newObjectScreen(sess, fs.NOID, section{label: "Files", open: func(sess *session, fso atlas.Object) screen {

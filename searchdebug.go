@@ -221,7 +221,7 @@ func (s searchDebugScreen) fieldOrder() []fieldReading {
 		switch {
 		case f.points() > 0:
 			return 0
-		case f.hasText() || f.Reason == "not_stored":
+		case f.hasText() || f.Reason == atlas.ReasonNotStored:
 			return 1
 		}
 		return 2
@@ -453,9 +453,9 @@ func (s searchDebugScreen) fieldRows(order []fieldReading, rows int) string {
 		case f.points() > 0:
 			pts = fmt.Sprintf("%7.2f", f.points())
 			words = synString.Render(strings.Join(scoredClauses(f, s.res), " "))
-		case f.Reason == "not_stored":
+		case f.Reason == atlas.ReasonNotStored:
 			pts, words = dimStyle.Render(fmt.Sprintf("%7s", "—")), dimStyle.Render("not stored")
-		case f.Reason == "analysis_failed":
+		case f.Reason == atlas.ReasonAnalysisFailed:
 			pts, words = dimStyle.Render(fmt.Sprintf("%7s", "—")), warnStyle.Render("analysis failed")
 		case f.hasText():
 			pts, words = dimStyle.Render(fmt.Sprintf("%7s", "—")), dimStyle.Render("no match")
@@ -547,16 +547,16 @@ var searchFieldLabels = map[string]string{
 // reasonWords explains a field with no text to show.
 func reasonWords(f fieldReading, t atlas.Type) string {
 	switch f.Reason {
-	case "not_stored":
+	case atlas.ReasonNotStored:
 		if f.Field == "name_variant_teim" {
 			return "Not stored. Atlas fills this field with other forms of each creator's name, so Solr can't show its words."
 		}
 		return "Not stored, and nothing stored is copied into it, so Solr can't show its words."
-	case "full_text":
+	case atlas.ReasonFullText:
 		return "Full text is too long to analyse. When the " + string(t) + " matches, Solr's highlighter shows up to 3 passages."
-	case "analysis_failed":
+	case atlas.ReasonAnalysisFailed:
 		return "Solr couldn't analyse this field's text, so its words can't be shown."
-	case "not_in_schema":
+	case atlas.ReasonNotInSchema:
 		return "The search handler searches this field, but Solr's schema has no such field."
 	}
 	return "No value on this " + string(t) + "."
@@ -622,7 +622,7 @@ func (s searchDebugScreen) fieldLines(f fieldReading, width int) []string {
 		if f.Truncated {
 			add(warnStyle.Render("Only the first 25 values of a source were analysed."))
 		}
-		if f.Reason == "analysis_failed" {
+		if f.Reason == atlas.ReasonAnalysisFailed {
 			add(warnStyle.Render(reasonWords(f, s.obj.Type)))
 		}
 		out = append(out, "")

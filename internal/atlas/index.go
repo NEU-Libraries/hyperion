@@ -74,6 +74,14 @@ type ExplainNode struct {
 	Details     []ExplainNode `json:"details"`
 }
 
+// Reasons an ExplainedField has no text to show.
+const (
+	ReasonNotStored      = "not_stored"
+	ReasonFullText       = "full_text"
+	ReasonAnalysisFailed = "analysis_failed"
+	ReasonNotInSchema    = "not_in_schema"
+)
+
 // ExplainedField is one qf field: the stored text that feeds it, analysed
 // against the words. Reason says why a field has no text: not_stored,
 // full_text, analysis_failed or not_in_schema ("" otherwise).

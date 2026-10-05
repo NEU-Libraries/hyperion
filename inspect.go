@@ -114,9 +114,7 @@ func (s objectScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		// Say up front what the account can't open, rather than as an error
 		// after choosing it.
 		for i, sec := range s.sections {
-			switch {
-			case sec.label == "MODS history" && !s.sess.user.ReadsMODSHistory(),
-				sec.group == "Search" && !s.sess.user.ReadsIndex():
+			if sec.allowed != nil && !sec.allowed(s.sess.user) {
 				s.sections[i].label += " (admins only)"
 			}
 		}
@@ -165,7 +163,7 @@ func (s objectScreen) View() string {
 	// The object: its title and where it sits, framed under its type and PID.
 	name := titleStyle.Render(string(s.obj.Type) + " " + s.obj.NOID)
 	if tombstoned(s.obj) {
-		name += "  " + warnStyle.Render("tombstoned")
+		name += "  " + warnStyle.Render(tombstonedWarn)
 	}
 	about := lipgloss.NewStyle().Bold(true).Render(s.obj.Title)
 	if crumb := breadcrumb(s.obj.Ancestors); crumb != "" {
