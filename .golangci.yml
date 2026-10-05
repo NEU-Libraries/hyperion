@@ -1,0 +1,93 @@
+# golangci-lint v2 configuration. Run with `make lint`.
+# Linter docs: https://golangci-lint.run/docs/linters/
+version: "2"
+
+linters:
+  # "standard" is errcheck, govet, ineffassign, staticcheck and unused.
+  # Not enabled: bodyclose (atlas.Client.send closes every body itself, and
+  # bodyclose can't see that) and prealloc (noise for slices this small).
+  default: standard
+  enable:
+    - gocyclo     # branch count per function
+    - gocognit    # nesting-weighted complexity
+    - funlen      # function length
+    - goconst     # repeated string literals that want a constant
+    - dupl        # copy-pasted blocks
+    - revive      # naming and style
+    - misspell
+    - unconvert   # needless type conversions
+    - unparam     # parameters that always get the same value
+    - nakedret    # bare returns in long functions
+    - errorlint   # error wrapping and comparison
+    - noctx       # HTTP requests without a context
+    - copyloopvar
+    - usestdlibvars
+
+  settings:
+    gocyclo:
+      # Bubble Tea Update and key handlers are big switches by nature;
+      # 20 lets those through but catches functions doing too much.
+      min-complexity: 20
+    gocognit:
+      min-complexity: 30
+    funlen:
+      lines: 100
+      statements: 60
+      ignore-comments: true
+    goconst:
+      min-len: 3
+      # Section tables name a few things two or three times on purpose.
+      min-occurrences: 4
+      ignore-string-values:
+        # Key names compared in Bubble Tea switches.
+        - "^(enter|esc|up|down|left|right|tab|q|ctrl\\+c)$"
+    dupl:
+      threshold: 150
+    revive:
+      rules:
+        - name: exported
+          disabled: true # package main and internal/ — no public API to document
+        - name: package-comments
+          disabled: true
+        - name: var-naming
+        - name: indent-error-flow
+        - name: early-return
+        - name: unused-parameter
+          disabled: true # Bubble Tea interfaces fix the signatures
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: errorf
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: increment-decrement
+        - name: range
+        - name: time-naming
+        - name: context-as-argument
+        - name: blank-imports
+        - name: empty-block
+        - name: if-return
+
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Table tests and fakes are long and branchy by design.
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - gocognit
+          - funlen
+          - goconst
+          - dupl
+      # Fake servers write canned bodies; a failed write fails the test anyway.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
