@@ -194,7 +194,6 @@ func (s exportScreen) pidKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	var cmd tea.Cmd
 	s.pidInput, cmd = s.pidInput.Update(msg)
 	return s, cmd
-
 }
 
 // outKey handles the folder step: enter resolves the export; esc goes back
@@ -218,7 +217,6 @@ func (s exportScreen) outKey(msg tea.KeyMsg) (screen, tea.Cmd) {
 	var cmd tea.Cmd
 	s.outInput, cmd = s.outInput.Update(msg)
 	return s, cmd
-
 }
 
 // toPID opens the PID prompt, labelled for the chosen type.
