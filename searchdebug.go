@@ -572,96 +572,86 @@ var (
 // fieldLines is the detail for one field: its text with the matched words
 // marked, its index and query tokens, and what each word scored in it.
 func (s searchDebugScreen) fieldLines(f fieldReading, width int) []string {
-	r := s.res
-	var out []string
-	add := func(text string) {
-		out = append(out, strings.Split(wrapped(lipgloss.NewStyle(), text, width), "\n")...)
-	}
-
-	out = append(out, lipgloss.NewStyle().Bold(true).Render(firstNonEmpty(searchFieldLabels[f.Field], f.Field)))
-	var sources []string
-	for _, v := range f.Values {
-		if !slices.Contains(sources, v.Source) {
-			sources = append(sources, v.Source)
-		}
-	}
+	d := detailLines{width: width}
+	d.lines = append(d.lines, lipgloss.NewStyle().Bold(true).Render(firstNonEmpty(searchFieldLabels[f.Field], f.Field)))
+	sources := valueSources(f)
 	copied := len(sources) > 1 || len(sources) == 1 && sources[0] != f.Field
 	if copied {
-		add(dimStyle.Render("Copied from ") + synElement.Render(strings.Join(sources, ", ")))
+		d.add(dimStyle.Render("Copied from ") + synElement.Render(strings.Join(sources, ", ")))
 	}
-	out = append(out, "")
+	d.blank()
 
-	typed := map[string]bool{}
-	for _, c := range r.clauses {
-		for _, w := range strings.Fields(strings.ToLower(c.text)) {
-			typed[w] = true
-		}
-	}
 	switch {
 	case len(f.Highlights) > 0:
-		for i, h := range f.Highlights {
-			if i > 0 {
-				out = append(out, dimStyle.Render("…"))
-			}
-			for _, l := range strings.Split(strings.ReplaceAll(h, "\r", ""), "\n") {
-				if l = strings.TrimSpace(l); l != "" {
-					add(emphasise(l))
-				}
-			}
-		}
-		out = append(out, "")
+		d.highlights(f.Highlights)
 	case len(f.Values) == 0:
-		add(dimStyle.Render(reasonWords(f, s.obj.Type)))
+		d.add(dimStyle.Render(reasonWords(f, s.obj.Type)))
 	default:
-		for _, v := range f.Values {
-			if copied {
-				out = append(out, synElement.Render(v.Source))
-			}
-			add(markMatches(v, typed))
-		}
-		if f.Truncated {
-			add(warnStyle.Render("Only the first 25 values of a source were analysed."))
-		}
-		if f.Reason == atlas.ReasonAnalysisFailed {
-			add(warnStyle.Render(reasonWords(f, s.obj.Type)))
-		}
-		out = append(out, "")
-		var toks []string
-		seen := map[string]bool{}
-		for _, v := range f.Values {
-			for _, t := range v.Tokens {
-				if seen[t.Text] {
-					continue
-				}
-				seen[t.Text] = true
-				if t.Match {
-					toks = append(toks, hitStyle.Render(t.Text))
-				} else {
-					toks = append(toks, t.Text)
-				}
-			}
-		}
-		add(dimStyle.Render("Index tokens  ") + strings.Join(toks, " "))
+		d.values(f, s.res, copied, s.obj.Type)
 	}
-	if q := f.QueryTokens; q != nil {
-		var parts []string
-		if len(q.Typed) == len(q.Analysed) {
-			for i, t := range q.Typed {
-				if a := q.Analysed[i]; a != t {
-					parts = append(parts, t+dimStyle.Render(" → ")+synString.Render(a))
-				} else {
-					parts = append(parts, t)
-				}
-			}
-		} else {
-			parts = append(parts, strings.Join(q.Typed, " ")+dimStyle.Render(" → ")+synString.Render(strings.Join(q.Analysed, " ")))
-		}
-		add(dimStyle.Render("Query tokens  ") + strings.Join(parts, dimStyle.Render(" · ")))
+	if f.QueryTokens != nil {
+		d.add(dimStyle.Render("Query tokens  ") + queryTokens(*f.QueryTokens))
 	}
 
-	out = append(out, "")
-	pad := 0
+	d.blank()
+	d.clauseScores(f, s.res)
+	d.blank()
+	d.lines = append(d.lines, hitStyle.Render("word")+dimStyle.Render(" matched as typed   ")+stemStyle.Render("word")+dimStyle.Render(" matched in another form"))
+	return d.lines
+}
+
+// detailLines builds the detail panel's lines, wrapping each to width.
+type detailLines struct {
+	lines []string
+	width int
+}
+
+func (d *detailLines) add(text string) {
+	d.lines = append(d.lines, strings.Split(wrapped(lipgloss.NewStyle(), text, d.width), "\n")...)
+}
+
+func (d *detailLines) blank() { d.lines = append(d.lines, "") }
+
+// highlights adds a full-text field's highlighted passages, … between them.
+func (d *detailLines) highlights(passages []string) {
+	for i, h := range passages {
+		if i > 0 {
+			d.lines = append(d.lines, dimStyle.Render("…"))
+		}
+		for _, l := range strings.Split(strings.ReplaceAll(h, "\r", ""), "\n") {
+			if l = strings.TrimSpace(l); l != "" {
+				d.add(emphasise(l))
+			}
+		}
+	}
+	d.blank()
+}
+
+// values adds a field's stored values with the matches marked, each under its
+// source when the field is copied from others, then the field's index tokens.
+func (d *detailLines) values(f fieldReading, r *reading, copied bool, t atlas.Type) {
+	typed := typedWords(r)
+	for _, v := range f.Values {
+		if copied {
+			d.lines = append(d.lines, synElement.Render(v.Source))
+		}
+		d.add(markMatches(v, typed))
+	}
+	if f.Truncated {
+		d.add(warnStyle.Render("Only the first 25 values of a source were analysed."))
+	}
+	if f.Reason == atlas.ReasonAnalysisFailed {
+		d.add(warnStyle.Render(reasonWords(f, t)))
+	}
+	d.blank()
+	d.add(dimStyle.Render("Index tokens  ") + strings.Join(indexTokens(f.Values), " "))
+}
+
+// clauseScores adds one line per clause: what it scored in this field, and
+// whether that counts in full or only as a tie-breaker.
+func (d *detailLines) clauseScores(f fieldReading, r *reading) {
 	all := append(slices.Clone(r.clauses), r.bonuses...)
+	pad := 0
 	for _, c := range all {
 		pad = max(pad, lipgloss.Width(clauseName(c)))
 	}
@@ -672,27 +662,86 @@ func (s searchDebugScreen) fieldLines(f fieldReading, width int) []string {
 		p, ok := f.scores[c.text]
 		if !ok {
 			if !c.bonus {
-				add(dimStyle.Render(name + gap + "—  no match here"))
+				d.add(dimStyle.Render(name + gap + "—  no match here"))
 			}
 			continue
 		}
-		best, _ := c.best()
-		switch {
-		case best.field == f.Field:
-			add(lipgloss.NewStyle().Bold(true).Render(name) + gap + fmt.Sprintf("%.2f  ", p) + okStyle.Render("counts in full: its best field"))
-		case p == best.points:
-			// Tied for best: one of the two counts in full, and it makes no
-			// difference which.
-			add(lipgloss.NewStyle().Bold(true).Render(name) + gap + fmt.Sprintf("%.2f  ", p) +
-				okStyle.Render("counts in full: ties with "+best.field))
-		default:
-			add(lipgloss.NewStyle().Bold(true).Render(name) + gap + fmt.Sprintf("%.2f  ", p) +
-				dimStyle.Render(fmt.Sprintf("counts 1%% (%.2f): %s scored %.2f", p*0.01, best.field, best.points)))
+		d.add(lipgloss.NewStyle().Bold(true).Render(name) + gap + fmt.Sprintf("%.2f  ", p) + countsAs(f.Field, p, c))
+	}
+}
+
+// countsAs says how a clause's points in field count toward the score.
+func countsAs(field string, p float64, c clause) string {
+	best, _ := c.best()
+	switch {
+	case best.field == field:
+		return okStyle.Render("counts in full: its best field")
+	case p == best.points:
+		// Tied for best: one of the two counts in full, and it makes no
+		// difference which.
+		return okStyle.Render("counts in full: ties with " + best.field)
+	default:
+		return dimStyle.Render(fmt.Sprintf("counts 1%% (%.2f): %s scored %.2f", p*0.01, best.field, best.points))
+	}
+}
+
+// valueSources are the fields a field's values were copied from, in order.
+func valueSources(f fieldReading) []string {
+	var sources []string
+	for _, v := range f.Values {
+		if !slices.Contains(sources, v.Source) {
+			sources = append(sources, v.Source)
 		}
 	}
-	out = append(out, "")
-	out = append(out, hitStyle.Render("word")+dimStyle.Render(" matched as typed   ")+stemStyle.Render("word")+dimStyle.Render(" matched in another form"))
-	return out
+	return sources
+}
+
+// typedWords are the words of every clause as typed, lower-cased.
+func typedWords(r *reading) map[string]bool {
+	typed := map[string]bool{}
+	for _, c := range r.clauses {
+		for _, w := range strings.Fields(strings.ToLower(c.text)) {
+			typed[w] = true
+		}
+	}
+	return typed
+}
+
+// indexTokens are the distinct tokens of a field's values, matches marked.
+func indexTokens(values []atlas.FieldValue) []string {
+	var toks []string
+	seen := map[string]bool{}
+	for _, v := range values {
+		for _, t := range v.Tokens {
+			if seen[t.Text] {
+				continue
+			}
+			seen[t.Text] = true
+			if t.Match {
+				toks = append(toks, hitStyle.Render(t.Text))
+			} else {
+				toks = append(toks, t.Text)
+			}
+		}
+	}
+	return toks
+}
+
+// queryTokens shows the words as typed and as analysed: word by word when
+// the analyzer kept the count, else as two whole phrases.
+func queryTokens(q atlas.QueryTokens) string {
+	arrow := dimStyle.Render(" → ")
+	if len(q.Typed) != len(q.Analysed) {
+		return strings.Join(q.Typed, " ") + arrow + synString.Render(strings.Join(q.Analysed, " "))
+	}
+	parts := make([]string, len(q.Typed))
+	for i, t := range q.Typed {
+		parts[i] = t
+		if a := q.Analysed[i]; a != t {
+			parts[i] = t + arrow + synString.Render(a)
+		}
+	}
+	return strings.Join(parts, dimStyle.Render(" · "))
 }
 
 // markMatches marks a value's matched tokens: as typed, or in another form
