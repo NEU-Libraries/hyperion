@@ -4,3 +4,6 @@
 
 # Default export target (`./<pid>-mods/`) — don't commit downloaded MODS.
 /*-mods/
+
+# Internal plans and process notes — kept locally, not published.
+/docs/
