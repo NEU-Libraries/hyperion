@@ -451,31 +451,8 @@ func fieldValue(key string, raw json.RawMessage, width int) string {
 		if len(t) == 0 {
 			return dimStyle.Render("none")
 		}
-		strs := make([]string, 0, len(t))
-		for _, e := range t {
-			s, ok := e.(string)
-			if !ok {
-				strs = nil
-				break
-			}
-			strs = append(strs, s)
-		}
-		if strs != nil {
-			return truncate(strings.Join(strs, ", "), width)
-		}
-		// A list of {"id": …} objects (a File's identifiers) shows the ids.
-		var ids []string
-		for _, e := range t {
-			m, ok := e.(map[string]any)
-			id, isStr := m["id"].(string)
-			if !ok || len(m) != 1 || !isStr {
-				ids = nil
-				break
-			}
-			ids = append(ids, id)
-		}
-		if ids != nil {
-			return truncate(strings.Join(ids, ", "), width)
+		if joined, ok := listValue(t); ok {
+			return truncate(joined, width)
 		}
 	case map[string]any:
 		if len(t) == 0 {
@@ -488,6 +465,33 @@ func fieldValue(key string, raw json.RawMessage, width int) string {
 		buf.Write(raw)
 	}
 	return truncate(buf.String(), width)
+}
+
+// listValue comma-joins a list of strings, or of {"id": …} objects (a File's
+// identifiers) by their ids; ok is false for a list of anything else.
+func listValue(list []any) (joined string, ok bool) {
+	strs := make([]string, 0, len(list))
+	for _, e := range list {
+		s, isStr := e.(string)
+		if !isStr {
+			strs = nil
+			break
+		}
+		strs = append(strs, s)
+	}
+	if strs != nil {
+		return strings.Join(strs, ", "), true
+	}
+	var ids []string
+	for _, e := range list {
+		m, isMap := e.(map[string]any)
+		id, isStr := m["id"].(string)
+		if !isMap || len(m) != 1 || !isStr {
+			return "", false
+		}
+		ids = append(ids, id)
+	}
+	return strings.Join(ids, ", "), true
 }
 
 // breadcrumb renders the ancestor chain root-first: "Title (pid) › …", with

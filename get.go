@@ -24,6 +24,9 @@ type getSection struct {
 	path  func(t atlas.Type, pid string, o getOptions) string
 }
 
+// searchDebugName is the one section with words of its own (--q).
+const searchDebugName = "search-debug"
+
 type getOptions struct {
 	at   string // mods: a retained version label
 	page int    // contents: which page
@@ -73,7 +76,7 @@ var getSections = []getSection{
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathFileVersions(pid) }},
 	{"solr", "the Solr document (admins and delegated admins)", false, "Solr document", atlas.IndexedTypes,
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathSolr(pid) }},
-	{"search-debug", "how search scores it for --q WORDS (admins and delegated admins)", false, "search explanation",
+	{searchDebugName, "how search scores it for --q WORDS (admins and delegated admins)", false, "search explanation",
 		atlas.ExplainedTypes, func(_ atlas.Type, pid string, o getOptions) string { return atlas.PathSearchExplanation(pid, o.q) }},
 }
 
@@ -137,20 +140,8 @@ func (c cli) get(args []string) int {
 		fmt.Fprintf(c.stderr, "hyperion get: no section %q — one of %s\n", name, sectionNames())
 		return exitUsage
 	}
-	if o.at != "" && sec.name != "mods" {
-		fmt.Fprintln(c.stderr, "hyperion get: --at goes with the mods section")
-		return exitUsage
-	}
-	if strings.TrimSpace(o.q) != "" && sec.name != "search-debug" {
-		fmt.Fprintln(c.stderr, "hyperion get: --q goes with the search-debug section")
-		return exitUsage
-	}
-	if sec.name == "search-debug" && strings.TrimSpace(o.q) == "" {
-		fmt.Fprintln(c.stderr, "hyperion get: search-debug needs the words to explain, with --q")
-		return exitUsage
-	}
-	if o.page < 1 {
-		fmt.Fprintln(c.stderr, "hyperion get: --page counts from 1")
+	if msg := sec.optionsMisfit(o); msg != "" {
+		fmt.Fprintln(c.stderr, "hyperion get:", msg)
 		return exitUsage
 	}
 
@@ -180,26 +171,49 @@ func (c cli) get(args []string) int {
 	}
 	path := sec.path(typ, pid, o)
 	if body, err = client.Raw(ctx, path); err != nil {
-		if errors.Is(err, atlas.ErrNotFound) {
-			return c.sectionNotFound(ctx, client, pid, sec, typ)
-		}
-		if errors.Is(err, atlas.ErrForbidden) && sec.name == "mods-history" {
-			fmt.Fprintln(c.stderr, "hyperion:", modsHistoryLimit)
-			return exitFailed
-		}
-		if errors.Is(err, atlas.ErrForbidden) && (sec.name == "solr" || sec.name == "search-debug") {
-			fmt.Fprintln(c.stderr, "hyperion:", indexLimit)
-			return exitFailed
-		}
-		if errors.Is(err, atlas.ErrNotIndexed) {
-			fmt.Fprintf(c.stderr, "hyperion: PID %s: Solr holds no document for it, so it can't appear in search. "+
-				"Reindexing it in Atlas fixes this.\n", pid)
-			return exitFailed
-		}
-		p := explain(fmt.Sprintf("Couldn't get %s for PID %s.", sec.name, pid), err)
-		return c.getFailed(p, err)
+		return c.rawFailed(ctx, client, pid, sec, typ, err)
 	}
 	return c.emit(body)
+}
+
+// optionsMisfit says what is wrong with the flags for this section, or "".
+func (s getSection) optionsMisfit(o getOptions) string {
+	switch {
+	case o.at != "" && s.name != "mods":
+		return "--at goes with the mods section"
+	case strings.TrimSpace(o.q) != "" && s.name != searchDebugName:
+		return "--q goes with the search-debug section"
+	case s.name == searchDebugName && strings.TrimSpace(o.q) == "":
+		return "search-debug needs the words to explain, with --q"
+	case o.page < 1:
+		return "--page counts from 1"
+	}
+	return ""
+}
+
+// getLimits say why Atlas refuses a section to most users.
+var getLimits = map[string]string{
+	"mods-history":  modsHistoryLimit,
+	"solr":          indexLimit,
+	searchDebugName: indexLimit,
+}
+
+// rawFailed reports a section's route failing, in the terms of that section.
+func (c cli) rawFailed(ctx context.Context, client *atlas.Client, pid string, sec getSection, typ atlas.Type, err error) int {
+	if errors.Is(err, atlas.ErrNotFound) {
+		return c.sectionNotFound(ctx, client, pid, sec, typ)
+	}
+	if limit, ok := getLimits[sec.name]; ok && errors.Is(err, atlas.ErrForbidden) {
+		fmt.Fprintln(c.stderr, "hyperion:", limit)
+		return exitFailed
+	}
+	if errors.Is(err, atlas.ErrNotIndexed) {
+		fmt.Fprintf(c.stderr, "hyperion: PID %s: Solr holds no document for it, so it can't appear in search. "+
+			"Reindexing it in Atlas fixes this.\n", pid)
+		return exitFailed
+	}
+	p := explain(fmt.Sprintf("Couldn't get %s for PID %s.", sec.name, pid), err)
+	return c.getFailed(p, err)
 }
 
 // sectionNotFound tells apart the two things a 404 on a section's route can
