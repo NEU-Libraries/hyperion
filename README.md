@@ -18,7 +18,49 @@ each member's MODS through Atlas's polymorphic `/resources/:id/mods` route.
 
 ## Install / build
 
-Build from source (Go 1.21+; the toolchain auto-fetches the pinned version):
+### Download a release
+
+The repository's Releases page has a binary for each Mac:
+`hyperion-darwin-arm64` for Apple Silicon and `hyperion-darwin-amd64` for
+Intel. Run `uname -m` if you're unsure: `arm64` is Apple Silicon, `x86_64` is
+Intel.
+
+1. Download the binary for your Mac.
+2. In Terminal, go to the folder it downloaded to, and rename it:
+
+   ```sh
+   mv hyperion-darwin-arm64 hyperion
+   ```
+
+3. Make it executable. A browser saves a download without that permission.
+
+   ```sh
+   chmod +x hyperion
+   ```
+
+4. Clear macOS's quarantine flag. A binary downloaded through a browser, Mail,
+   or AirDrop is quarantined, and Gatekeeper refuses to run it because it
+   isn't notarized.
+
+   ```sh
+   xattr -d com.apple.quarantine hyperion
+   ```
+
+   If this answers `No such xattr`, the file wasn't quarantined (`curl`
+   doesn't quarantine), and there is nothing to clear.
+
+5. Run it:
+
+   ```sh
+   ./hyperion --version
+   ```
+
+It is a static binary: move it anywhere, such as a folder on your `PATH`.
+There is nothing else to install.
+
+### Build from source
+
+Go 1.21 or later; the toolchain fetches the version `go.mod` pins.
 
 ```sh
 go build -o hyperion .          # this platform
@@ -28,17 +70,8 @@ GOOS=linux  GOARCH=amd64 go build -o hyperion .   # Linux
 ```
 
 `make mac` builds both Mac binaries at once, as `hyperion-darwin-arm64` and
-`hyperion-darwin-amd64`.
-
-The result is a static binary — copy it anywhere and run it; nothing to install.
-
-On a Mac, a binary downloaded through a browser, Mail, or AirDrop is
-quarantined and Gatekeeper will refuse to run it (it isn't notarized). Either
-fetch it with `curl`, which doesn't quarantine, or clear the flag:
-
-```sh
-xattr -d com.apple.quarantine ./hyperion
-```
+`hyperion-darwin-amd64`. A binary you build yourself is already executable
+and isn't quarantined.
 
 ## Authentication
 
