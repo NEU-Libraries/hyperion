@@ -20,10 +20,10 @@ each member's MODS through Atlas's polymorphic `/resources/:id/mods` route.
 
 ### Download a release
 
-The repository's Releases page has a binary for each Mac:
-`hyperion-darwin-arm64` for Apple Silicon and `hyperion-darwin-amd64` for
-Intel. Run `uname -m` if you're unsure: `arm64` is Apple Silicon, `x86_64` is
-Intel.
+The [Releases page](https://github.com/NEU-Libraries/hyperion/releases) has a
+binary for each Mac: `hyperion-darwin-arm64` for Apple Silicon and
+`hyperion-darwin-amd64` for Intel. Run `uname -m` if you're unsure: `arm64` is
+Apple Silicon, `x86_64` is Intel.
 
 1. Download the binary for your Mac.
 2. In Terminal, go to the folder it downloaded to, and rename it:
@@ -72,6 +72,13 @@ GOOS=linux  GOARCH=amd64 go build -o hyperion .   # Linux
 `make mac` builds both Mac binaries at once, as `hyperion-darwin-arm64` and
 `hyperion-darwin-amd64`. A binary you build yourself is already executable
 and isn't quarantined.
+
+With Go installed, `go install` fetches, builds and installs it into
+`$(go env GOPATH)/bin` in one step:
+
+```sh
+go install github.com/NEU-Libraries/hyperion@latest
+```
 
 ## Authentication
 
