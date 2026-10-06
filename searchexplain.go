@@ -9,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf16"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 )
 
 // A reading of Solr's explanation of one object's score, after Cerberus's

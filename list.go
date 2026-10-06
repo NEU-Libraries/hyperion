@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

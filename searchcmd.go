@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 )
 
 // search prints one page of Atlas's catalog search response to stdout,

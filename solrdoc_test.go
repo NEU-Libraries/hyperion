@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 
 	"github.com/charmbracelet/x/ansi"
 )

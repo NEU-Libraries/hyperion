@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"

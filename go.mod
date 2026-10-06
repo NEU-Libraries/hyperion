@@ -1,4 +1,4 @@
-module hyperion
+module github.com/NEU-Libraries/hyperion
 
 go 1.24.2
 

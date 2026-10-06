@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"hyperion/internal/atlas"
-	"hyperion/internal/export"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/export"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"

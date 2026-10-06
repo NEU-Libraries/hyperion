@@ -19,8 +19,8 @@ import (
 	"os"
 	"strings"
 
-	"hyperion/internal/atlas"
-	"hyperion/internal/export"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/export"
 )
 
 // versionFile is .version at the repo root, the one place the version lives.

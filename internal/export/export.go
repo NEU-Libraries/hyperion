@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 )
 
 const maxConcurrency = 16

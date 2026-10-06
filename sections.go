@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"hyperion/internal/atlas"
+	"github.com/NEU-Libraries/hyperion/internal/atlas"
 )
 
 // section is one entry of an object's section menu; open builds its screen.
