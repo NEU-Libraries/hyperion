@@ -13,10 +13,12 @@ func TestSectionReads(t *testing.T) {
 			"/resources/w1/mods/versions": http.StatusForbidden,
 			"/works/w2/mets":              http.StatusNotFound,
 			"/collections/gone/children":  http.StatusGone,
+			"/resources/shut/children":    http.StatusForbidden,
 		},
 		map[string]string{
 			"/collections/k1/children":       `["w1","w2"]`,
 			"/communities/c1/children":       `["k1"]`,
+			"/resources/gone/children":       `[{"id":"u1","noid":"w1","klass":"Work","title":"One","thumbnail":null,"tombstoned":true},{"noid":"k2","klass":"Collection","title":"Two","tombstoned":false}]`,
 			"/compilations/s1/contents":      `{"contents":[{"noid":"w1","klass":"Work","title":"One"}],"pagination":{"pages":1}}`,
 			"/files/b1/ancestry":             `{"file_set":"fs1","work":null}`,
 			"/works/w1/mets":                 `{"work":{"id":"w1","mets":{"pages":["fs1"]}}}`,
@@ -40,7 +42,14 @@ func TestSectionReads(t *testing.T) {
 	if _, err := c.Children(ctx, TypeCollection, "gone"); !errors.Is(err, ErrGone) {
 		t.Errorf("tombstoned children: err = %v, want ErrGone", err)
 	}
-	if got, err := c.SetContents(ctx, "s1"); err != nil || len(got) != 1 || got[0].Title != "One" {
+	if got, err := c.ResourceChildren(ctx, "gone"); err != nil || len(got) != 2 ||
+		got[0] != (Digest{NOID: "w1", Klass: "Work", Title: "One", Tombstoned: true}) || got[1].Tombstoned {
+		t.Errorf("resource children = %+v, %v", got, err)
+	}
+	if _, err := c.ResourceChildren(ctx, "shut"); !errors.Is(err, ErrForbidden) {
+		t.Errorf("resource children without admin: err = %v, want ErrForbidden", err)
+	}
+	if got, err := c.SetContents(ctx, "s1"); err != nil || len(got) != 1 || got[0].Title != "One" || got[0].Tombstoned {
 		t.Errorf("set contents = %+v, %v", got, err)
 	}
 	if got, err := c.FileAncestry(ctx, "b1"); err != nil || got != (FileAncestry{FileSet: "fs1"}) {

@@ -12,11 +12,13 @@ import (
 // takes a bare NOID; ids are path-escaped here so a caller can pass user input.
 
 // Digest is the lightweight {noid, klass, title} shape Atlas uses for resolved
-// Set contents and descendant works.
+// Set contents and descendant works. Only some routes send tombstoned; the
+// rest decode as false.
 type Digest struct {
-	NOID  string `json:"noid"`
-	Klass string `json:"klass"`
-	Title string `json:"title"`
+	NOID       string `json:"noid"`
+	Klass      string `json:"klass"`
+	Title      string `json:"title"`
+	Tombstoned bool   `json:"tombstoned"`
 }
 
 // Asset is one downloadable thing on a Work: a held binary (a File — size and
@@ -90,6 +92,16 @@ func (c *Client) Children(ctx context.Context, t Type, id string) ([]string, err
 	var noids []string
 	err := c.getJSON(ctx, path, &noids)
 	return noids, err
+}
+
+// ResourceChildren lists everything directly beneath a Collection or
+// Community, live or tombstoned, whatever the container's own state — the
+// route behind a tombstoned container, whose typed children route answers
+// ErrGone. Atlas gates it on admin: anyone else gets ErrForbidden.
+func (c *Client) ResourceChildren(ctx context.Context, id string) ([]Digest, error) {
+	var out []Digest
+	err := c.getJSON(ctx, PathResourceChildren(id), &out)
+	return out, err
 }
 
 // SetContents walks every page of a Set's resolved contents.

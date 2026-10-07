@@ -15,17 +15,18 @@ import (
 
 func esc(id string) string { return url.PathEscape(id) }
 
-func PathMODS(id string) string           { return "/resources/" + esc(id) + "/mods.xml" }
-func PathMODSJSON(id string) string       { return "/resources/" + esc(id) + "/mods" }
-func PathMODSVersions(id string) string   { return "/resources/" + esc(id) + "/mods/versions" }
-func PathMODSVersion(id, v string) string { return PathMODSVersions(id) + "/" + esc(v) }
-func PathPermissions(id string) string    { return "/resources/" + esc(id) + "/permissions" }
-func PathFileSets(id string) string       { return "/works/" + esc(id) + "/file_sets" }
-func PathAssets(id string) string         { return "/works/" + esc(id) + "/assets" }
-func PathLinkedMembers(id string) string  { return "/works/" + esc(id) + "/linked_members" }
-func PathAssociations(id string) string   { return "/works/" + esc(id) + "/associations" }
-func PathFileAncestry(id string) string   { return "/files/" + esc(id) + "/ancestry" }
-func PathFileVersions(id string) string   { return "/files/" + esc(id) + "/versions" }
+func PathMODS(id string) string             { return "/resources/" + esc(id) + "/mods.xml" }
+func PathMODSJSON(id string) string         { return "/resources/" + esc(id) + "/mods" }
+func PathMODSVersions(id string) string     { return "/resources/" + esc(id) + "/mods/versions" }
+func PathMODSVersion(id, v string) string   { return PathMODSVersions(id) + "/" + esc(v) }
+func PathPermissions(id string) string      { return "/resources/" + esc(id) + "/permissions" }
+func PathResourceChildren(id string) string { return "/resources/" + esc(id) + "/children" }
+func PathFileSets(id string) string         { return "/works/" + esc(id) + "/file_sets" }
+func PathAssets(id string) string           { return "/works/" + esc(id) + "/assets" }
+func PathLinkedMembers(id string) string    { return "/works/" + esc(id) + "/linked_members" }
+func PathAssociations(id string) string     { return "/works/" + esc(id) + "/associations" }
+func PathFileAncestry(id string) string     { return "/files/" + esc(id) + "/ancestry" }
+func PathFileVersions(id string) string     { return "/files/" + esc(id) + "/versions" }
 func PathSetContents(id string, page int) string {
 	return fmt.Sprintf("/compilations/%s/contents?page=%d&per_page=100", esc(id), page)
 }
