@@ -31,6 +31,7 @@ type getOptions struct {
 	at   string // mods: a retained version label
 	page int    // contents: which page
 	q    string // search-debug: the words
+	all  bool   // children: live and tombstoned, even beneath a tombstoned container
 }
 
 var (
@@ -58,8 +59,13 @@ var getSections = []getSection{
 		func(t atlas.Type, pid string, _ getOptions) string { return atlas.PathMETS(t, pid) }},
 	{"permissions", "who may view and edit it", false, "permissions", nil,
 		func(_ atlas.Type, pid string, _ getOptions) string { return atlas.PathPermissions(pid) }},
-	{"children", "PIDs directly beneath a Collection or Community", true, "children", containers,
-		func(t atlas.Type, pid string, _ getOptions) string { return atlas.PathChildren(t, pid) }},
+	{"children", "PIDs directly beneath a Collection or Community; with --all, every child", true, "children", containers,
+		func(t atlas.Type, pid string, o getOptions) string {
+			if o.all {
+				return atlas.PathResourceChildren(pid)
+			}
+			return atlas.PathChildren(t, pid)
+		}},
 	{"contents", "a Set's works, one page (--page N, default 1)", false, "contents", []atlas.Type{atlas.TypeSet},
 		func(_ atlas.Type, pid string, o getOptions) string { return atlas.PathSetContents(pid, o.page) }},
 	{"filesets", "a Work's FileSets, with their files", false, "FileSets", works,
@@ -119,6 +125,7 @@ func (c cli) get(args []string) int {
 	fs.StringVar(&o.at, "at", "", "with mods: a retained version, e.g. v3")
 	fs.IntVar(&o.page, "page", 1, "with contents: which page")
 	fs.StringVar(&o.q, "q", "", "with search-debug: the words to explain")
+	fs.BoolVar(&o.all, "all", false, "with children: every child, live or tombstoned")
 
 	positional, err := parseInterspersed(fs, args)
 	if err != nil {
@@ -181,6 +188,8 @@ func (s getSection) optionsMisfit(o getOptions) string {
 	switch {
 	case o.at != "" && s.name != "mods":
 		return "--at goes with the mods section"
+	case o.all && s.name != "children":
+		return "--all goes with the children section"
 	case strings.TrimSpace(o.q) != "" && s.name != searchDebugName:
 		return "--q goes with the search-debug section"
 	case s.name == searchDebugName && strings.TrimSpace(o.q) == "":
@@ -198,10 +207,18 @@ var getLimits = map[string]string{
 	searchDebugName: indexLimit,
 }
 
+// childrenAllLimit is why children --all fails for anyone but an admin or a
+// delegated admin.
+const childrenAllLimit = "children --all is only available to admins and delegated admins."
+
 // rawFailed reports a section's route failing, in the terms of that section.
 func (c cli) rawFailed(ctx context.Context, client *atlas.Client, pid string, sec getSection, typ atlas.Type, o getOptions, err error) int {
 	if errors.Is(err, atlas.ErrNotFound) {
 		return c.sectionNotFound(ctx, client, pid, sec, typ, o)
+	}
+	if o.all && errors.Is(err, atlas.ErrForbidden) {
+		fmt.Fprintln(c.stderr, "hyperion:", childrenAllLimit)
+		return exitFailed
 	}
 	if limit, ok := getLimits[sec.name]; ok && errors.Is(err, atlas.ErrForbidden) {
 		fmt.Fprintln(c.stderr, "hyperion:", limit)
@@ -318,6 +335,8 @@ Flags:
   --at VERSION   with mods: the MODS as of a retained version, e.g. v3
   --page N       with contents: which page (default 1)
   --q WORDS      with search-debug: the words to explain
+  --all          with children: every child, live or tombstoned, as digests,
+                 even beneath a tombstoned container (admins and delegated admins)
   --url URL      Atlas base URL (default $ATLAS_URL)
 
 Examples:

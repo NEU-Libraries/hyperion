@@ -160,7 +160,7 @@ hand-built cURL calls with a bearer header. Auth comes from `ATLAS_URL` /
 | `mods-history` | the retained MODS versions (admins and delegated admins) |
 | `mets` | METS, for a Work or FileSet |
 | `permissions` | the access-control envelope |
-| `children` | PIDs directly beneath a Collection or Community |
+| `children` | PIDs directly beneath a Collection or Community; with `--all`, every child, live or tombstoned, as digests, even beneath a tombstoned container (admins and delegated admins) |
 | `contents` | a Set's works, one page (`--page N`, default 1) |
 | `filesets`, `files` | a Work's FileSets with their files, or its downloadable files |
 | `linked`, `associations` | the Collections a Work is linked into; its associations |

@@ -42,6 +42,16 @@ func fakeAtlasCLI(t *testing.T) *httptest.Server {
 			w.Write([]byte(`{"compilation":{"id":"s1","title":"Reading list"}}`))
 		case "/collections/k1/children":
 			w.Write([]byte(`["w1"]`))
+		case "/resources/k1/children":
+			w.Write([]byte(`[{"noid":"w1","klass":"Work","title":"Harbor","tombstoned":true}]`))
+		case "/resources/k9":
+			w.Header().Set("Location", "/collections/k9")
+			w.WriteHeader(http.StatusFound)
+		case "/collections/k9":
+			w.WriteHeader(http.StatusGone)
+			w.Write([]byte(`{"collection":{"id":"k9","title":"Withdrawn","tombstoned":true}}`))
+		case "/resources/k9/children":
+			w.WriteHeader(http.StatusForbidden)
 		case "/resources/w1/mods.xml":
 			w.Write([]byte(workMODS))
 		case "/resources/w1/mods":
@@ -97,6 +107,7 @@ func TestGetPrintsRawResponses(t *testing.T) {
 		{[]string{"get", "w1", "mods", "--at", "v2"}, "<mods>v2</mods>\n"},
 		{[]string{"get", "--at", "v2", "w1", "mods"}, "<mods>v2</mods>\n"},
 		{[]string{"get", "k1", "children"}, `["w1"]`},
+		{[]string{"get", "k1", "children", "--all"}, `[{"noid":"w1","klass":"Work","title":"Harbor","tombstoned":true}]`},
 		{[]string{"get", "w1", "mods-json"}, `{"title":"Harbor"}`},
 		{[]string{"get", "w1", "solr"}, `{"noid":"w1","document":{"id":"u1"}}`},
 		{[]string{"get", "w1", "search-debug", "--q", "harbor maps"}, `{"noid":"w1","matched":true}`},
@@ -136,6 +147,9 @@ func TestGetFailures(t *testing.T) {
 		{[]string{"get", "w1", "children"}, exitUsage, "PID w1 is a Work; children is only for a Collection or Community."},
 		{[]string{"get", "w1", "thumbnails"}, exitUsage, `no section "thumbnails"`},
 		{[]string{"get", "w1", "files", "--at", "v2"}, exitUsage, "--at goes with the mods section"},
+		{[]string{"get", "w1", "mods", "--all"}, exitUsage, "--all goes with the children section"},
+		{[]string{"get", "w1", "children", "--all"}, exitUsage, "PID w1 is a Work; children is only for a Collection or Community."},
+		{[]string{"get", "k9", "children", "--all"}, exitFailed, "children --all is only available to admins and delegated admins."},
 		{[]string{"get", "w1", "mods", "--at", "v9"}, exitFailed,
 			"PID w1: this Work has no MODS version v9. hyperion get w1 mods-history lists the versions Atlas keeps."},
 		{[]string{"get", "s1", "contents", "--page", "0"}, exitUsage, "--page counts from 1"},
