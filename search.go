@@ -103,17 +103,17 @@ func newSearchResults(sess *session, q string, t atlas.Type) listScreen {
 	if t != "" {
 		about += " in " + typePlural(t)
 	}
-	return newCountedListScreen(sess, "Results", about, fmt.Sprintf("Nothing matches %s.", about),
-		func(ctx context.Context, c *atlas.Client) ([]listItem, string, error) {
+	return newResultListScreen(sess, "Results", about, fmt.Sprintf("Nothing matches %s.", about),
+		func(ctx context.Context, c *atlas.Client) (listResult, error) {
 			res, err := c.Search(ctx, q, t, 1)
 			if err != nil {
-				return nil, "", err
+				return listResult{}, err
 			}
 			items := make([]listItem, len(res.Results))
 			for i, h := range res.Results {
 				items[i] = searchRow(h)
 			}
-			return items, about + " · " + matchCount(len(items), res.Pagination.Total), nil
+			return listResult{items: items, about: about + " · " + matchCount(len(items), res.Pagination.Total)}, nil
 		}).withRaw(atlas.PathSearch(q, t, 1, atlas.SearchPageSize), "search")
 }
 

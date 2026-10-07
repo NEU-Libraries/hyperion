@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -310,5 +313,87 @@ func TestListPagesTheWholeView(t *testing.T) {
 	short, _ = sendList(short, initResult[listMsg](t, short.Init()))
 	if strings.Contains(short.View(), "pgdn") {
 		t.Error("a list that fits shouldn't offer paging")
+	}
+}
+
+// answer is one fake Atlas response.
+type answer struct {
+	status int
+	body   string
+}
+
+// childrenAgainst opens a Collection's Children against a fake Atlas that
+// answers each path with a status and a body, and loads it. It returns the
+// loaded list and every path requested.
+func childrenAgainst(t *testing.T, answers map[string]answer) (listScreen, []string) {
+	t.Helper()
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.URL.RequestURI())
+		a, ok := answers[r.URL.RequestURI()]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(a.status)
+		fmt.Fprint(w, a.body)
+	}))
+	t.Cleanup(srv.Close)
+	sess := testSession()
+	sess.width, sess.height = 100, 30
+	sess.client = atlas.New(srv.URL, "tok")
+	obj := atlas.Object{Type: atlas.TypeCollection, NOID: "k1", Title: "Maps"}
+	list := childrenSection(sess, obj).(listScreen)
+	list, _ = sendList(list, initResult[listMsg](t, list.Init()))
+	return list, asked
+}
+
+func TestChildrenOfATombstonedCollection(t *testing.T) {
+	gone := answer{http.StatusGone, `{"error":"gone"}`}
+
+	list, asked := childrenAgainst(t, map[string]answer{
+		"/collections/k1/children": gone,
+		"/resources/k1/children": {http.StatusOK, `[{"id":"u1","noid":"w1","klass":"Work","title":"Harbor","thumbnail":null,"tombstoned":true},
+			{"id":"u2","noid":"k2","klass":"Collection","title":"Atlases","thumbnail":null,"tombstoned":false}]`},
+	})
+	if strings.Join(asked, ",") != "/collections/k1/children,/resources/k1/children" {
+		t.Errorf("requests = %v", asked)
+	}
+	if list.state != loaded || len(list.items) != 2 {
+		t.Fatalf("an admin should see the children: state=%v items=%+v", list.state, list.items)
+	}
+	if w := list.items[0]; w.pid != "w1" || w.title != "Harbor" || w.kind != "Work" || w.warn != tombstonedWarn || w.lookup {
+		t.Errorf("withdrawn row = %+v", w)
+	}
+	if k := list.items[1]; k.pid != "k2" || k.title != "Atlases" || k.kind != "Collection" || k.warn != "" {
+		t.Errorf("live row = %+v", k)
+	}
+	if v := ansi.Strip(list.View()); !strings.Contains(v, "Harbor") || !strings.Contains(v, tombstonedWarn) {
+		t.Errorf("view:\n%s", v)
+	}
+	if list.rawPath != "/resources/k1/children" {
+		t.Errorf("r should show the route that answered, not %q", list.rawPath)
+	}
+
+	// A librarian without admin rights sees the 410, not a permission error.
+	list, _ = childrenAgainst(t, map[string]answer{
+		"/collections/k1/children": gone,
+		"/resources/k1/children":   {http.StatusForbidden, `{"error":"forbidden"}`},
+	})
+	if v := ansi.Strip(list.View()); list.state != failed || !strings.Contains(v, "It is tombstoned, so Atlas no longer serves this.") {
+		t.Errorf("forbidden fallback: state=%v\n%s", list.state, v)
+	}
+	if list.rawPath != "/collections/k1/children" {
+		t.Errorf("rawPath = %q", list.rawPath)
+	}
+}
+
+func TestChildrenOfALiveCollection(t *testing.T) {
+	list, asked := childrenAgainst(t, map[string]answer{"/collections/k1/children": {http.StatusOK, `["w1"]`}})
+	if strings.Join(asked, ",") != "/collections/k1/children" {
+		t.Errorf("only the typed route should be read: %v", asked)
+	}
+	if len(list.items) != 1 || list.items[0].pid != "w1" || !list.items[0].lookup || list.rawPath != "/collections/k1/children" {
+		t.Errorf("items = %+v, rawPath = %q", list.items, list.rawPath)
 	}
 }

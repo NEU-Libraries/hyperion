@@ -244,7 +244,7 @@ inspects — Atlas serves its record with a 410.
 | METS | Work, FileSet | `/works/:id/mets`, `/file_sets/:id/mets` |
 | FileSets, Downloadable files | Work | `/works/:id/file_sets`, `/works/:id/assets` |
 | Linked collections, Associations | Work | `/works/:id/linked_members`, `/works/:id/associations` |
-| Children | Collection, Community | `…/children` |
+| Children | Collection, Community | `…/children`; for a tombstoned one, `/resources/:id/children` (admins and delegated admins) |
 | Contents | Set | `/compilations/:id/contents` |
 | FileSet and Work, Versions | File | `/files/:id/ancestry`, `/files/:id/versions` |
 | Ancestors; Set definition or Referenced PIDs | when present | from the record |

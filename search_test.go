@@ -65,8 +65,8 @@ func searchApp(t *testing.T, body string, asked *[]string) app {
 func loadList(t *testing.T, a app) app {
 	t.Helper()
 	l := a.top().(listScreen)
-	items, about, err := l.load(context.Background(), a.sess.client)
-	a, _ = sendApp(a, listMsg{id: l.id, items: items, about: about, err: err})
+	res, err := l.load(context.Background(), a.sess.client)
+	a, _ = sendApp(a, listMsg{id: l.id, listResult: res, err: err})
 	return a
 }
 

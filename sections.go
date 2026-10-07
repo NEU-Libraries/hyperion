@@ -245,11 +245,29 @@ func associationsSection(sess *session, obj atlas.Object) screen {
 		}).withRaw(atlas.PathAssociations(obj.NOID), stem(obj, "associations"))
 }
 
+// childrenSection reads the typed children route, which serves every live
+// container to anyone who can read it. A tombstoned container's answers 410;
+// then an admin or delegated admin falls back on the route that lists its
+// children whatever its state, and anyone else sees the 410.
 func childrenSection(sess *session, obj atlas.Object) screen {
-	return newListScreen(sess, "Children", objectContext(obj), "Nothing is directly beneath this "+string(obj.Type)+".",
-		func(ctx context.Context, c *atlas.Client) ([]listItem, error) {
+	return newResultListScreen(sess, "Children", objectContext(obj), "Nothing is directly beneath this "+string(obj.Type)+".",
+		func(ctx context.Context, c *atlas.Client) (listResult, error) {
 			noids, err := c.Children(ctx, obj.Type, obj.NOID)
-			return pidItems(noids, ""), err
+			if !errors.Is(err, atlas.ErrGone) {
+				return listResult{items: pidItems(noids, "")}, err
+			}
+			digests, ferr := c.ResourceChildren(ctx, obj.NOID)
+			if errors.Is(ferr, atlas.ErrForbidden) {
+				return listResult{}, err
+			}
+			items := make([]listItem, len(digests))
+			for i, d := range digests {
+				items[i] = listItem{pid: d.NOID, title: d.Title, kind: d.Klass}
+				if d.Tombstoned {
+					items[i].warn = tombstonedWarn
+				}
+			}
+			return listResult{items: items, rawPath: atlas.PathResourceChildren(obj.NOID)}, ferr
 		}).withRaw(atlas.PathChildren(obj.Type, obj.NOID), stem(obj, "children"))
 }
 

@@ -41,9 +41,7 @@ type listScreen struct {
 	title string
 	about string
 	empty string
-	// load reads the rows, and the about line if only the answer can say it
-	// ("100 of 312 matches"); "" keeps the one the screen was built with.
-	load func(context.Context, *atlas.Client) ([]listItem, string, error)
+	load  func(context.Context, *atlas.Client) (listResult, error)
 
 	rawPath, rawName string // the Atlas route r shows raw ("" = none)
 	rawTitle         string // what the raw response is ("" = the list's title)
@@ -58,12 +56,20 @@ type listScreen struct {
 	requested map[int]bool
 }
 
+// listResult is what a list's load reads: its rows, the about line if only
+// the answer can say it ("100 of 312 matches"), and the route r shows if the
+// answer decides it (a fallback route). An empty string keeps the screen's own.
+type listResult struct {
+	items   []listItem
+	about   string
+	rawPath string
+}
+
 type (
 	listMsg struct {
-		id    int64
-		items []listItem
-		about string
-		err   error
+		id int64
+		listResult
+		err error
 	}
 	lookupMsg struct {
 		id  int64
@@ -74,15 +80,16 @@ type (
 )
 
 func newListScreen(sess *session, title, about, empty string, load func(context.Context, *atlas.Client) ([]listItem, error)) listScreen {
-	return newCountedListScreen(sess, title, about, empty, func(ctx context.Context, c *atlas.Client) ([]listItem, string, error) {
+	return newResultListScreen(sess, title, about, empty, func(ctx context.Context, c *atlas.Client) (listResult, error) {
 		items, err := load(ctx, c)
-		return items, "", err
+		return listResult{items: items}, err
 	})
 }
 
-// newCountedListScreen is a list whose about line comes with its rows, for a
-// list that shows only part of what matched.
-func newCountedListScreen(sess *session, title, about, empty string, load func(context.Context, *atlas.Client) ([]listItem, string, error)) listScreen {
+// newResultListScreen is a list whose about line or raw route comes with its
+// rows: a list that shows only part of what matched, or one read from
+// whichever route answered.
+func newResultListScreen(sess *session, title, about, empty string, load func(context.Context, *atlas.Client) (listResult, error)) listScreen {
 	return listScreen{
 		sess: sess, id: nextScreenID(), title: title, about: about, empty: empty, load: load,
 		spinner: newSpinner(), requested: map[int]bool{},
@@ -99,8 +106,8 @@ func staticList(sess *session, title, about, empty string, items []listItem) lis
 func (s listScreen) Init() tea.Cmd {
 	id, client, load := s.id, s.sess.client, s.load
 	return tea.Batch(s.spinner.Tick, func() tea.Msg {
-		items, about, err := load(context.Background(), client)
-		return listMsg{id: id, items: items, about: about, err: err}
+		res, err := load(context.Background(), client)
+		return listMsg{id: id, listResult: res, err: err}
 	})
 }
 
@@ -122,6 +129,9 @@ func (s listScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 		s.items = msg.items
 		if msg.about != "" {
 			s.about = msg.about
+		}
+		if msg.rawPath != "" {
+			s.rawPath = msg.rawPath
 		}
 		s.state = loaded
 		return s, s.lookups()
